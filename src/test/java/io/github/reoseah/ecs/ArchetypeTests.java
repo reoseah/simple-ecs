@@ -6,18 +6,39 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class ArchetypeTests {
     @Test
-    void demoTestMethod() {
-        var component1 = 0;
-        var component2 = 1;
+    void testArchetypeMethods() {
+        var world = new World();
 
-        var archetype = new Archetype(new int[]{(1 << component1) | (1 << component2)});
+        int componentA = world.register(Component.IntegerComponent.INSTANCE);
+        int componentB = world.register(Component.LongComponent.INSTANCE);
 
-        var entity1 = 0;
-        var entity2 = 1;
+        var archetype = new Archetype(world, BitSets.makeBitSet(componentA, componentB));
 
-        archetype.add(entity1);
-        archetype.add(entity2);
+        int entity1 = world.createEntity();
+        int entity2 = world.createEntity();
 
-        assertEquals(0, archetype.get(entity1, component1));
+        archetype.add(entity1).setInt(componentA, 100).setLong(componentB, 1L << 33);
+        archetype.add(entity2).setInt(componentA, 43).setLong(componentB, 2000);
+
+        assertEquals(2, archetype.nextIndex);
+        assertEquals(100, archetype.access(entity1).getInt(componentA));
+    }
+
+    @Test
+    void testArchetypeGrowing() {
+        var world = new World();
+
+        int componentA = world.register(Component.IntegerComponent.INSTANCE);
+        int componentB = world.register(Component.LongComponent.INSTANCE);
+
+        var archetype = new Archetype(world, BitSets.makeBitSet(componentA, componentB));
+
+        for (int i = 0; i < 10_000; i++) {
+            int entity = world.createEntity();
+
+            archetype.add(entity);
+        }
+
+        assertEquals(10_000, archetype.nextIndex);
     }
 }
