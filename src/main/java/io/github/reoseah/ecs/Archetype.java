@@ -1,6 +1,5 @@
 package io.github.reoseah.ecs;
 
-import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.VisibleForTesting;
 
 import java.util.Arrays;
@@ -10,7 +9,7 @@ public final class Archetype {
     private static final float DEFAULT_GROWTH_FACTOR = 2F;
 
     private final World world;
-    private final int[] componentMask;
+    public final long[] componentMask;
 
     /// IDs of the components in the archetype.
     ///
@@ -32,7 +31,7 @@ public final class Archetype {
     ///
     /// This is the closest thing to a Structure-of-Arrays in Java I think, it
     /// is likely the fastest architecture for components storing primitive types
-    /// like `int` or `long`.
+    /// like `int` or `long` and many entities with the same composition.
     private final Object[] componentData;
 
     /// IDs of entities in the archetype. The order should be parallel to the
@@ -50,14 +49,14 @@ public final class Archetype {
     @VisibleForTesting
     int recycledIndicesCount;
 
-    public Archetype(World world, int[] componentMask) {
+    public Archetype(World world, long[] componentMask) {
         this.world = world;
 
         this.componentMask = componentMask;
 
         int componentCount = 0;
-        for (int maskFragment : componentMask) {
-            componentCount += Integer.bitCount(maskFragment);
+        for (long word : componentMask) {
+            componentCount += Long.bitCount(word);
         }
         this.componentMap = new int[componentCount];
         this.componentData = new Object[componentCount];
@@ -67,11 +66,11 @@ public final class Archetype {
         this.entityMap = new int[this.capacity];
 
         int componentIdx = 0;
-        for (int i = 0; i < componentMask.length * 32; i++) {
-            int arrayIdx = i / 32;
-            int bitIdx = i % 32;
+        for (int i = 0; i < componentMask.length * 64; i++) {
+            int arrayIdx = i / 64;
+            int bitIdx = i % 64;
 
-            if ((componentMask[arrayIdx] & (1 << bitIdx)) != 0) {
+            if ((componentMask[arrayIdx] & (1L << bitIdx)) != 0) {
                 this.componentMap[componentIdx] = i;
                 // TODO: customize data representing a component, not just ints
                 this.componentData[componentIdx] = world.getComponent(i).createStorage(capacity);
@@ -82,7 +81,7 @@ public final class Archetype {
         this.recycledIndicesCount = 0;
     }
 
-    public EntityAccess add(int entity) {
+    public Index add(int entity) {
         int index = -1;
         if (this.recycledIndicesCount > 0) {
             index = this.recycledIndices[this.recycledIndicesCount - 1];
@@ -97,7 +96,7 @@ public final class Archetype {
             this.nextIndex++;
         }
 
-        return new EntityAccess(this, index);
+        return new Index(this, index);
     }
 
     private void grow() {
@@ -116,30 +115,44 @@ public final class Archetype {
     public void remove(int entity) {
         for (int i = 0; i < this.nextIndex; i++) {
             if (this.entityMap[i] == entity) {
-                this.entityMap[i] = -1;
+                this.removeIndex(i);
 
-                if (this.recycledIndices.length == this.recycledIndicesCount) {
-                    int newCapacity = (int) (this.recycledIndices.length * DEFAULT_GROWTH_FACTOR);
-                    this.recycledIndices = Arrays.copyOf(this.recycledIndices, newCapacity);
-                }
-
-                this.recycledIndices[this.recycledIndicesCount] = entity;
-                this.recycledIndicesCount++;
+                return;
             }
         }
         throw new IllegalArgumentException("Entity " + entity + " is not present in this archetype.");
     }
 
-    public EntityAccess access(int entity) {
+    public void removeIndex(int index) {
+        this.entityMap[index] = -1;
+
+        for (int i = 0; i < this.componentMap.length; i++) {
+            @SuppressWarnings("unchecked")
+            var componentType = (Component<Object>) world.getComponent(this.componentMap[i]);
+            componentType.remove(this.componentData[i], index);
+        }
+
+        if (this.recycledIndices.length == this.recycledIndicesCount) {
+            int newCapacity = (int) (this.recycledIndices.length * DEFAULT_GROWTH_FACTOR);
+            this.recycledIndices = Arrays.copyOf(this.recycledIndices, newCapacity);
+        }
+
+        this.recycledIndices[this.recycledIndicesCount] = index;
+        this.recycledIndicesCount++;
+    }
+
+    /// Return an object to access entity at the given index.
+    /// Rather inefficient - underlying structure not optimal for arbitrary access.
+    public Index access(int entity) {
         for (int i = 0; i < this.nextIndex; i++) {
             if (this.entityMap[i] == entity) {
-                return new EntityAccess(this, i);
+                return new Index(this, i);
             }
         }
         throw new IllegalArgumentException("Entity " + entity + " is not present in this archetype.");
     }
 
-    @ApiStatus.Internal
+
     public int getComponentIndex(int component) {
         for (int i = 0; i < this.componentMap.length; i++) {
             if (this.componentMap[i] == component) {
@@ -149,22 +162,39 @@ public final class Archetype {
         throw new IllegalArgumentException("Component " + component + " is not present in this archetype.");
     }
 
+    public Object getColumn(int component) {
+        return this.componentData[this.getComponentIndex(component)];
+    }
+
+    /// Assumes the component is backed by `int[]`, otherwise will throw an error.
+    ///
+    /// @throws ClassCastException if the underlying data is not `int[]`
+    public int[] getIntColumn(int component) {
+        return (int[]) this.componentData[this.getComponentIndex(component)];
+    }
+
+    /// Assumes the component is backed by `long[]`, otherwise will throw an error.
+    ///
+    /// @throws ClassCastException if the underlying data is not `long[]`
+    public long[] getLongColumn(int component) {
+        return (long[]) this.componentData[this.getComponentIndex(component)];
+    }
+
     /// A helper object to read and write to an entity. Most methods can be chained.
-    public static final class EntityAccess {
+    public static final class Index {
         private final Archetype archetype;
         private final int index;
 
-        public EntityAccess(Archetype archetype, int index) {
+        public Index(Archetype archetype, int index) {
             this.archetype = archetype;
             this.index = index;
         }
 
         /// Assumes the component is backed by `int[]`, otherwise will throw an error.
-        /// otherwise likely to throw an error.
         ///
         /// @return self, for chaining calls
         /// @throws ClassCastException if the underlying data is not `int[]`
-        public EntityAccess setInt(int component, int value) {
+        public Index setInt(int component, int value) {
             var data = this.archetype.componentData[this.archetype.getComponentIndex((component))];
             ((int[]) data)[this.index] = value;
 
@@ -185,7 +215,7 @@ public final class Archetype {
         ///
         /// @return self, for chaining calls
         /// @throws ClassCastException if the underlying data is not `long[]`
-        public EntityAccess setLong(int component, long value) {
+        public Index setLong(int component, long value) {
             var data = this.archetype.componentData[this.archetype.getComponentIndex((component))];
             ((long[]) data)[this.index] = value;
 

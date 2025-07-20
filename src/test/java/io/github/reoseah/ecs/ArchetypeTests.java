@@ -12,10 +12,10 @@ class ArchetypeTests {
         int componentA = world.register(Component.IntegerComponent.INSTANCE);
         int componentB = world.register(Component.LongComponent.INSTANCE);
 
-        var archetype = new Archetype(world, BitSets.makeBitSet(componentA, componentB));
+        var archetype = new Archetype(world, BitSets.encode(componentA, componentB));
 
-        int entity1 = world.createEntity();
-        int entity2 = world.createEntity();
+        int entity1 = world.createEmptyEntity();
+        int entity2 = world.createEmptyEntity();
 
         archetype.add(entity1).setInt(componentA, 100).setLong(componentB, 1L << 33);
         archetype.add(entity2).setInt(componentA, 43).setLong(componentB, 2000);
@@ -31,10 +31,10 @@ class ArchetypeTests {
         int componentA = world.register(Component.IntegerComponent.INSTANCE);
         int componentB = world.register(Component.LongComponent.INSTANCE);
 
-        var archetype = new Archetype(world, BitSets.makeBitSet(componentA, componentB));
+        var archetype = new Archetype(world, BitSets.encode(componentA, componentB));
 
         for (int i = 0; i < 10_000; i++) {
-            int entity = world.createEntity();
+            int entity = world.createEmptyEntity();
 
             archetype.add(entity);
         }
