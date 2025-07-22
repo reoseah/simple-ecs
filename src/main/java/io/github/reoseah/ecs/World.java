@@ -1,74 +1,161 @@
 package io.github.reoseah.ecs;
 
+import it.unimi.dsi.fastutil.ints.Int2LongMap;
+import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
+import org.jetbrains.annotations.ApiStatus;
+import org.jetbrains.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
-public class World {
-    private final List<Component<?>> components = new ArrayList<>();
-    private final Map<long[], Archetype> archetypes = new Object2ObjectOpenCustomHashMap<>(new BitSets.HashStrategy());
-    // TODO: reuse deleted entities
-    private int nextEntity = 0;
+public final class World {
+    @VisibleForTesting
+    final List<ComponentType<?>> components = new ArrayList<>();
 
-    public int register(Component<?> component) {
+    /// Map from entity ID (`int`) to `long` containing archetype ID in the
+    /// lower 32 bits and entity position inside the archetype in the upper 32.
+    /// (Technically 31 bits, as integers in Java are signed and negative ones
+    /// can't be used to index arrays.)
+    @VisibleForTesting
+    final Int2LongMap entityMap = new Int2LongOpenHashMap();
+
+    @VisibleForTesting
+    final List<Archetype> archetypes = new ArrayList<>();
+
+    // TODO: use adjacency graph
+    @VisibleForTesting
+    final Map<long[], Archetype> archetypeMap = new Object2ObjectOpenCustomHashMap<>(BitSets.HashStrategy.INSTANCE);
+
+    private final List<SystemState> systems = new ArrayList<>();
+
+    public int createComponent(ComponentType<?> component) {
         int idx = this.components.size();
         this.components.add(component);
         return idx;
     }
 
-    public Component<?> getComponent(int id) {
+    public ComponentType<?> getComponentType(int id) {
         return this.components.get((id));
     }
 
-    public int createEmptyEntity() {
-        return this.nextEntity++;
+    public int getEntityCount() {
+        return this.entityMap.size();
     }
 
-    public Archetype.Index createEntity(long[] componentMask) {
-        int entity = this.nextEntity++;
+    public EntityAccessor createEntity(long[] componentMask) {
+        int entity = this.entityMap.size();
 
-        var archetype = this.archetypes.get(componentMask);
+        var archetype = this.archetypeMap.get(componentMask);
         if (archetype == null) {
-            archetype = new Archetype(this, componentMask);
-            this.archetypes.put(componentMask, archetype);
+            archetype = createArchetype(componentMask);
         }
 
-        return archetype.add(entity);
+        int pos = archetype.add(entity);
+        this.entityMap.put(entity, ((long) archetype.id << Integer.SIZE) | pos);
+
+        return new EntityAccessor(entity, archetype, pos);
     }
 
-    // A simple system that will be called with every matching archetype.
-    public interface ArchetypeSystem {
-        void execute(List<Archetype> archetype);
+    public EntityAccessor accessEntity(int entity) {
+        long location = this.entityMap.remove(entity);
+        int archetypeId = (int) (location >> Integer.SIZE);
+        int pos = (int) location;
+        var archetype = this.archetypes.get(archetypeId);
+
+        return new EntityAccessor(entity, archetype, pos);
     }
 
-    private static class ArchetypeSystemEntry {
-        public final long[] componentMask;
-        public final ArchetypeSystem system;
-        public final List<Archetype> archetypes = new ArrayList<>();
+    /// Caches entity's ID and archetype position and allows setting the
+    /// components in a way that avoids boxing primitives to the extent possible.
+    ///
+    /// The instances are not updated if the underlying data changes,
+    /// therefore, should not be cached. Instead, store [#entity].
+    public static class EntityAccessor {
+        public final int entity;
+        private final Archetype archetype;
+        private final int pos;
 
-        public ArchetypeSystemEntry(long[] componentMask, ArchetypeSystem system) {
-            this.componentMask = componentMask;
-            this.system = system;
+        public EntityAccessor(int entity, Archetype archetype, int pos) {
+            this.entity = entity;
+            this.archetype = archetype;
+            this.pos = pos;
+        }
+
+        /// Sets value for an `int` component. Assumes the component is backed
+        /// by `int[]`, otherwise will throw [ClassCastException].
+        public EntityAccessor setInt(int component, int value) {
+            ((int[]) this.archetype.getColumn(component))[this.pos] = value;
+            return this;
+        }
+
+        /// Sets value for a `long` component. Assumes the component is backed
+        /// by `long[]`, otherwise will throw [ClassCastException].
+        public EntityAccessor setLong(int component, long value) {
+            ((long[]) this.archetype.getColumn(component))[this.pos] = value;
+            return this;
         }
     }
 
-    private final List<ArchetypeSystemEntry> archetypeSystems = new ArrayList<>();
+    public long getEntityLocation(int entity) {
+        return this.entityMap.get(entity);
+    }
 
-    public void createSystem(long[] componentMask, ArchetypeSystem system) {
-        var entry = new ArchetypeSystemEntry(componentMask, system);
-        for (var archetypeEntry : this.archetypes.entrySet()) {
-            if (BitSets.contains(archetypeEntry.getKey(), componentMask)) {
-                entry.archetypes.add(archetypeEntry.getValue());
+    public void removeEntity(int entity) {
+        long location = this.entityMap.remove(entity);
+        int archetypeId = (int) (location >> Integer.SIZE);
+        int pos = (int) location;
+
+        var archetype = this.archetypes.get(archetypeId);
+        int moved = archetype.remove(entity, pos);
+        if (moved != -1) {
+            this.entityMap.put(moved, location);
+        }
+    }
+
+    // TODO: currently systems using the same components/query each maintain
+    //     a list of matching archetypes, possibly cache returned instances,
+    //     keyed by bitmask/query, and in #createArchetype iterate through
+    //     existing keys and add archetype to corresponding lists;
+    //     systems would cache a reference to these mutable list, so they get
+    //     their state updated automatically
+    public List<Archetype> getMatchingArchetypes(long[] componentMask) {
+        var archetypes = new ArrayList<Archetype>();
+        for (var archetype : this.archetypes) {
+            if (BitSets.contains(archetype.componentMask, componentMask)) {
+                archetypes.add(archetype);
             }
         }
-        this.archetypeSystems.add(entry);
+        return archetypes;
     }
 
-    public void execute() {
-        for (var entry : this.archetypeSystems) {
-            entry.system.execute(entry.archetypes);
+    @ApiStatus.Internal
+    public Archetype createArchetype(long[] componentMask) {
+        var archetype = new Archetype(this, this.archetypes.size(), componentMask);
+        this.archetypes.add(archetype);
+        this.archetypeMap.put(componentMask, archetype);
+
+        for (var system : this.systems) {
+            if (BitSets.contains(system.componentMask, componentMask)) {
+                system.archetypes.add(archetype);
+            }
         }
+
+        return archetype;
+    }
+
+    @ApiStatus.Internal
+    public void addSystem(SystemState system) {
+        this.systems.add(system);
+    }
+
+    public void runOnce(SystemState.Builder builder) {
+        var system = builder.build(this);
+        system.run(this);
+    }
+
+    public Schedule createSchedule() {
+        return new Schedule(this);
     }
 }

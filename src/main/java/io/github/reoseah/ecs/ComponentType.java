@@ -2,14 +2,16 @@ package io.github.reoseah.ecs;
 
 import java.util.Arrays;
 
-public interface Component<S> {
+public interface ComponentType<S> {
     S createStorage(int capacity);
 
     S growStorage(S current, int newCapacity);
 
     void remove(S storage, int index);
 
-    enum IntegerComponent implements Component<int[]> {
+    void move(S storage, int from, int to);
+
+    enum IntegerComponent implements ComponentType<int[]> {
         INSTANCE;
 
         @Override
@@ -26,9 +28,15 @@ public interface Component<S> {
         public void remove(int[] storage, int index) {
             storage[index] = 0;
         }
+
+        @Override
+        public void move(int[] storage, int from, int to) {
+            storage[to] = storage[from];
+            storage[from] = 0;
+        }
     }
 
-    enum LongComponent implements Component<long[]> {
+    enum LongComponent implements ComponentType<long[]> {
         INSTANCE;
 
         @Override
@@ -44,6 +52,12 @@ public interface Component<S> {
         @Override
         public void remove(long[] storage, int index) {
             storage[index] = 0;
+        }
+
+        @Override
+        public void move(long[] storage, int from, int to) {
+            storage[to] = storage[from];
+            storage[from] = 0;
         }
     }
 }

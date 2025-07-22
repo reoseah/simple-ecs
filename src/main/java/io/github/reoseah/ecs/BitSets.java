@@ -1,6 +1,7 @@
 package io.github.reoseah.ecs;
 
 import it.unimi.dsi.fastutil.Hash;
+import it.unimi.dsi.fastutil.ints.IntCollection;
 
 import java.util.Arrays;
 
@@ -22,6 +23,31 @@ public class BitSets {
             bits[index] |= 1L << bit;
         }
         return bits;
+    }
+
+    public static long[] encode(IntCollection values) {
+        int max = 0;
+        for (int value : values) {
+            if (value > max) {
+                max = value;
+            }
+        }
+        long[] bits = new long[(max / Long.SIZE) + 1];
+        for (int value : values) {
+            int index = (value / Long.SIZE);
+            int bit = value % Long.SIZE;
+
+            bits[index] |= 1L << bit;
+        }
+        return bits;
+    }
+
+    public static int count(long[] bits) {
+        int count = 0;
+        for (long word : bits) {
+            count += Long.bitCount(word);
+        }
+        return count;
     }
 
     public static boolean has(long[] bits, int value) {
@@ -72,7 +98,9 @@ public class BitSets {
         return true;
     }
 
-    public static class HashStrategy implements Hash.Strategy<long[]> {
+    public enum HashStrategy implements Hash.Strategy<long[]> {
+        INSTANCE;
+
         @Override
         public int hashCode(long[] o) {
             return Arrays.hashCode(o);
