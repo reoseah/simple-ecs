@@ -20,7 +20,7 @@ public class Archetype {
     /// The number of entities actually contained in [#entities] and [#columns].
     private int count;
     /// An array of arrays - the `Object` here can be `int[]`, `long[]` or other
-    /// type according to component's [ComponentType].
+    /// type according to component's [ColumnType].
     private final Object[] columns;
 
     public Archetype(World world, int id, long[] componentMask) {
@@ -72,7 +72,7 @@ public class Archetype {
 
             this.entities = Arrays.copyOf(this.entities, newCapacity);
             for (int i = 0; i < this.components.length; i++) {
-                @SuppressWarnings("unchecked") var column = ((ComponentType<Object>) this.world.getComponentType(this.components[i])).growStorage(this.columns[i], newCapacity);
+                @SuppressWarnings("unchecked") var column = ((ColumnType<Object>) this.world.getComponentType(this.components[i])).growStorage(this.columns[i], newCapacity);
 
                 this.columns[i] = column;
             }
@@ -86,11 +86,11 @@ public class Archetype {
     /// Removes the passed entity and position from this archetype and returns
     /// data to update entity map maintained globally in [World]:
     /// - `-1` indicated entity was "popped" from the end of this archetype
-    /// - non-negative integer is ID of entity that was "swapped" to fill the
+    /// - non-negative integer is id of entity that was "swapped" to fill the
     ///   place previously used by the removed entity
     ///
     /// @implNote we don't check that `entity` and `pos` correspond to each
-    ///     other, if a wrong pair is passed, the archetype could be in an
+    ///     other, if a wrong pair is passed, the archetype will be in an
     ///     invalid state
     /// @see World#removeEntity
     int remove(int entity, int pos) {
@@ -98,7 +98,7 @@ public class Archetype {
         if (this.entities[popped] == entity) {
             for (int i = 0; i < this.components.length; i++) {
                 int component = this.components[i];
-                @SuppressWarnings("unchecked") var type = (ComponentType<Object>) this.world.getComponentType(component);
+                @SuppressWarnings("unchecked") var type = (ColumnType<Object>) this.world.getComponentType(component);
 
                 type.remove(this.columns[i], popped);
             }
@@ -108,7 +108,7 @@ public class Archetype {
 
             for (int i = 0; i < this.components.length; i++) {
                 int component = this.components[i];
-                @SuppressWarnings("unchecked") var type = (ComponentType<Object>) this.world.getComponentType(component);
+                @SuppressWarnings("unchecked") var type = (ColumnType<Object>) this.world.getComponentType(component);
 
                 type.move(this.columns[i], popped, pos);
             }

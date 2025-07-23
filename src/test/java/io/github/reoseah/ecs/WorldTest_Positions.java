@@ -12,7 +12,7 @@ import java.util.Random;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class WorldTest_Positions {
-    enum Vec2fComponentType implements ComponentType<float[]> {
+    enum FloatPairColumn implements ColumnType<float[]> {
         INSTANCE;
 
         @Override
@@ -41,8 +41,8 @@ class WorldTest_Positions {
     }
 
     static World world = new World();
-    static int positionComponent = world.createComponent(Vec2fComponentType.INSTANCE);
-    static int ageComponent = world.createComponent(ComponentType.IntegerComponent.INSTANCE);
+    static int positionComponent = world.createComponent(FloatPairColumn.INSTANCE);
+    static int ageComponent = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
     static Random random = new Random();
 
     @ParameterizedTest

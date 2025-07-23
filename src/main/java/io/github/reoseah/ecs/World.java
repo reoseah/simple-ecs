@@ -14,9 +14,10 @@ import java.util.Map;
 public final class World {
     private static final int DEFAULT_ENTITY_CAPACITY = 512;
 
-    private final List<ComponentType<?>> components = new ArrayList<>();
+    /// Maps component ids to their column type.
+    private final List<ColumnType<?>> components = new ArrayList<>();
 
-    /// Alive entities mapped from their ID to a pair of archetype ID and their
+    /// Alive entities mapped from their id to a pair of archetype id and their
     /// position inside the archetype aka "row", packed into a long like so:
     /// ```java
     /// entityMap[entity] = (archetype << 32L) | row
@@ -24,7 +25,7 @@ public final class World {
     ///
     /// Removed entities are mapped to an entity removed before them. This
     /// forms an implicit "stack" of dead entities, without having to use
-    /// extra memory for them. For more detailed explanation see
+    /// extra memory for it. For more detailed explanation see
     /// <a href="https://skypjack.github.io/2019-05-06-ecs-baf-part-3/">ECS
     /// back and forth, Part 3 - Why you don't need to store deleted entities</a>.
     /// The [#removedEntity] is the "head" of this stack.
@@ -32,6 +33,7 @@ public final class World {
     private int entityCount = 0;
     private int removedEntity = -1;
 
+    /// Maps archetype ids to their instance.
     private final List<Archetype> archetypes = new ArrayList<>();
 
     // TODO: use adjacency graph instead
@@ -39,13 +41,13 @@ public final class World {
 
     private final List<SystemState> systems = new ArrayList<>();
 
-    public int createComponent(ComponentType<?> component) {
+    public int createComponent(ColumnType<?> component) {
         int idx = this.components.size();
         this.components.add(component);
         return idx;
     }
 
-    public ComponentType<?> getComponentType(int id) {
+    public ColumnType<?> getComponentType(int id) {
         return this.components.get((id));
     }
 
@@ -205,7 +207,7 @@ public final class World {
     }
 
     /// Return value from [World#createEntity]. Allows to access ID of the
-    /// created entity.
+    /// created entity and also set component values with chaining methods.
     ///
     /// @see EntityLocation parent class for description of other methods
     public static final class CreateEntityResult extends EntityLocation<CreateEntityResult> {

@@ -2,7 +2,7 @@ package io.github.reoseah.ecs;
 
 import java.util.Arrays;
 
-public interface ComponentType<S> {
+public interface ColumnType<S> {
     S createStorage(int capacity);
 
     S growStorage(S current, int newCapacity);
@@ -11,7 +11,7 @@ public interface ComponentType<S> {
 
     void move(S storage, int from, int to);
 
-    enum IntegerComponent implements ComponentType<int[]> {
+    enum IntegerColumn implements ColumnType<int[]> {
         INSTANCE;
 
         @Override
@@ -36,7 +36,7 @@ public interface ComponentType<S> {
         }
     }
 
-    enum LongComponent implements ComponentType<long[]> {
+    enum LongColumn implements ColumnType<long[]> {
         INSTANCE;
 
         @Override

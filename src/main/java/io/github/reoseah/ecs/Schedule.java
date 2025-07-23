@@ -6,6 +6,7 @@ import java.util.List;
 public class Schedule {
     private final World world;
     private final List<SystemState> systems;
+    /// TODO: use query information to order/parallelize running systems
 
     public Schedule(World world) {
         this.world = world;

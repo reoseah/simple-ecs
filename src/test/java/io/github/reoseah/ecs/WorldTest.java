@@ -16,8 +16,8 @@ public class WorldTest {
     @BeforeEach
     void createWorld() {
         world = new World();
-        componentA = world.createComponent(ComponentType.IntegerComponent.INSTANCE);
-        componentB = world.createComponent(ComponentType.LongComponent.INSTANCE);
+        componentA = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
+        componentB = world.createComponent(ColumnType.LongColumn.INSTANCE);
         mask = BitSets.encode(componentA, componentB);
     }
 
