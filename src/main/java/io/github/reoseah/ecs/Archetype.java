@@ -1,7 +1,6 @@
 package io.github.reoseah.ecs;
 
 import io.github.reoseah.ecs.bitmanipulation.BitSets;
-import org.jetbrains.annotations.ApiStatus;
 
 import java.util.Arrays;
 
@@ -48,10 +47,35 @@ public class Archetype {
         }
     }
 
-    /// @return position of the entity inside the archetype, aka 'dense index' or 'row'
-    public int add(int entity) {
+    ///  Returns number of entities inside this archetype.
+    public int getCount() {
+        return this.count;
+    }
+
+    /// Returns type-erased storage underlying the passed component.
+    public Object getColumn(int component) {
+        for (int i = 0; i < this.components.length; i++) {
+            if (this.components[i] == component) {
+                return this.columns[i];
+            }
+        }
+        throw new IllegalArgumentException("Component " + component + " is not present in this archetype.");
+    }
+
+    /// Adds entity to this archetype and returns its position inside, aka
+    /// 'dense index' or 'row', so that it can be registered to entity map in
+    /// [World].
+    int add(int entity) {
         if (this.count == this.entities.length) {
-            this.grow();
+            // grow the list of entities and columns
+            int newCapacity = this.entities.length * 2;
+
+            this.entities = Arrays.copyOf(this.entities, newCapacity);
+            for (int i = 0; i < this.components.length; i++) {
+                @SuppressWarnings("unchecked") var column = ((ComponentType<Object>) this.world.getComponentType(this.components[i])).growStorage(this.columns[i], newCapacity);
+
+                this.columns[i] = column;
+            }
         }
         int pos = this.count;
         this.entities[pos] = entity;
@@ -59,24 +83,17 @@ public class Archetype {
         return pos;
     }
 
-    private void grow() {
-        int newCapacity = this.entities.length * 2;
-
-        this.entities = Arrays.copyOf(this.entities, newCapacity);
-        for (int i = 0; i < this.components.length; i++) {
-            @SuppressWarnings("unchecked") var column = ((ComponentType<Object>) this.world.getComponentType(this.components[i])).growStorage(this.columns[i], newCapacity);
-
-            this.columns[i] = column;
-        }
-    }
-
-    /// @return ID of an entity that was 'swapped' to replace the removed one,
-    ///     or `-1` if the removed entity was the last one and no 'swapping' was needed
-    /// @implNote we don't check that `this.entities[pos] == entity`, if a wrong pair is passed,
-    ///     the archetype could be in an invalid state
+    /// Removes the passed entity and position from this archetype and returns
+    /// data to update entity map maintained globally in [World]:
+    /// - `-1` indicated entity was "popped" from the end of this archetype
+    /// - non-negative integer is ID of entity that was "swapped" to fill the
+    ///   place previously used by the removed entity
+    ///
+    /// @implNote we don't check that `entity` and `pos` correspond to each
+    ///     other, if a wrong pair is passed, the archetype could be in an
+    ///     invalid state
     /// @see World#removeEntity
-    @ApiStatus.Internal
-    public int remove(int entity, int pos) {
+    int remove(int entity, int pos) {
         int popped = --this.count;
         if (this.entities[popped] == entity) {
             for (int i = 0; i < this.components.length; i++) {
@@ -97,18 +114,5 @@ public class Archetype {
             }
             return this.entities[pos];
         }
-    }
-
-    public Object getColumn(int component) {
-        for (int i = 0; i < this.components.length; i++) {
-            if (this.components[i] == component) {
-                return this.columns[i];
-            }
-        }
-        throw new IllegalArgumentException("Component " + component + " is not present in this archetype.");
-    }
-
-    public int getCount() {
-        return this.count;
     }
 }

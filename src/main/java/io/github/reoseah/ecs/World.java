@@ -5,7 +5,6 @@ import io.github.reoseah.ecs.bitmanipulation.LongArrayHashStrategy;
 import io.github.reoseah.ecs.bitmanipulation.Queries;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
 import org.jetbrains.annotations.ApiStatus;
-import org.jetbrains.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -17,8 +16,8 @@ public final class World {
 
     private final List<ComponentType<?>> components = new ArrayList<>();
 
-    /// Alive entities are mapped from their ID to a pair of archetype ID and
-    /// their position inside their archetype, packed into a long like so:
+    /// Alive entities mapped from their ID to a pair of archetype ID and their
+    /// position inside the archetype aka "row", packed into a long like so:
     /// ```java
     /// entityMap[entity] = (archetype << 32L) | row
     ///```
@@ -33,12 +32,10 @@ public final class World {
     private int entityCount = 0;
     private int removedEntity = -1;
 
-    @VisibleForTesting
-    final List<Archetype> archetypes = new ArrayList<>();
+    private final List<Archetype> archetypes = new ArrayList<>();
 
-    // TODO: use adjacency graph
-    @VisibleForTesting
-    final Map<long[], Archetype> archetypeMap = new Object2ObjectOpenCustomHashMap<>(LongArrayHashStrategy.INSTANCE);
+    // TODO: use adjacency graph instead
+    private final Map<long[], Archetype> archetypeMap = new Object2ObjectOpenCustomHashMap<>(LongArrayHashStrategy.INSTANCE);
 
     private final List<SystemState> systems = new ArrayList<>();
 

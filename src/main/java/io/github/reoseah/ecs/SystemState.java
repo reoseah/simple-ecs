@@ -14,6 +14,6 @@ public final class SystemState {
     }
 
     public void run(World world) {
-        this.system.execute(this.archetypes, world);
+        this.system.run(this.archetypes, world);
     }
 }
