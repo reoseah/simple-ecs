@@ -47,24 +47,26 @@ public class WorldTest {
         int[] counter = {0};
 
         var schedule = world.createSchedule();
-        schedule.addSystem(new SystemState.Builder((archetypes, _) -> {
-            // we only added one entity
-            assertEquals(1, archetypes.size());
+        schedule.addSystem(
+                Queries.of(componentA, componentB),
+                (archetypes, _) -> {
+                    // we only added one entity
+                    assertEquals(1, archetypes.size());
 
-            for (var archetype : archetypes) {
-                var entities = archetype.entities;
-                var columnA = (int[]) archetype.getColumn(componentA);
-                var columnB = (long[]) archetype.getColumn(componentB);
+                    for (var archetype : archetypes) {
+                        var entities = archetype.entities;
+                        var columnA = (int[]) archetype.getColumn(componentA);
+                        var columnB = (long[]) archetype.getColumn(componentB);
 
-                for (int i = 0; i < archetype.getCount(); i++) {
-                    assertEquals(entity1, entities[i]);
-                    assertEquals(10, columnA[i]);
-                    assertEquals(20, columnB[i]);
+                        for (int i = 0; i < archetype.getCount(); i++) {
+                            assertEquals(entity1, entities[i]);
+                            assertEquals(10, columnA[i]);
+                            assertEquals(20, columnB[i]);
 
-                    counter[0]++;
-                }
-            }
-        }).with(componentA, componentB));
+                            counter[0]++;
+                        }
+                    }
+                });
 
         schedule.run();
         assertEquals(1, counter[0]);

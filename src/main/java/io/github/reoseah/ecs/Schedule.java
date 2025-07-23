@@ -18,8 +18,8 @@ public class Schedule {
         }
     }
 
-    public void addSystem(SystemState.Builder builder) {
-        var system = builder.build(this.world);
+    public void addSystem(long[] query, SystemFunction handler) {
+        var system = new SystemState(handler, query, this.world.getQueryArchetypes(query));
         this.systems.add(system);
         this.world.addSystem(system);
     }

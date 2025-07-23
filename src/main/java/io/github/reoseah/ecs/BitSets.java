@@ -1,12 +1,9 @@
 package io.github.reoseah.ecs;
 
-import it.unimi.dsi.fastutil.Hash;
 import it.unimi.dsi.fastutil.ints.IntCollection;
 
-import java.util.Arrays;
-
 /// Contains utilities to operate on `long[]` representing lists of bits,
-/// similar to [java.util.BitSet], but in procedural style.
+/// similar to [java.util.BitSet], but in a non-object-oriented style.
 public class BitSets {
     public static long[] encode(int... values) {
         int max = 0;
@@ -96,19 +93,5 @@ public class BitSets {
             }
         }
         return true;
-    }
-
-    public enum HashStrategy implements Hash.Strategy<long[]> {
-        INSTANCE;
-
-        @Override
-        public int hashCode(long[] o) {
-            return Arrays.hashCode(o);
-        }
-
-        @Override
-        public boolean equals(long[] a, long[] b) {
-            return Arrays.equals(a, b);
-        }
     }
 }

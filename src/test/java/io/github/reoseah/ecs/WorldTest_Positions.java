@@ -6,8 +6,6 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-
 class WorldTest_Positions {
     enum Vec2fComponentType implements ComponentType<float[]> {
         INSTANCE;
@@ -48,12 +46,12 @@ class WorldTest_Positions {
         }
 
         var tick = world.createSchedule();
-        tick.addSystem(new SystemState.Builder(WorldTest_Positions::positionSystem1).with(positionComponent));
-        tick.addSystem(new SystemState.Builder(WorldTest_Positions::positionSystem2).with(positionComponent));
-        tick.addSystem(new SystemState.Builder(WorldTest_Positions::positionSystem3).with(positionComponent));
+        tick.addSystem(Queries.of(positionComponent), WorldTest_Positions::positionSystem1);
+        tick.addSystem(Queries.of(positionComponent), WorldTest_Positions::positionSystem2);
+        tick.addSystem(Queries.of(positionComponent), WorldTest_Positions::positionSystem3);
 
         var modify = world.createSchedule();
-        modify.addSystem(new SystemState.Builder(WorldTest_Positions::changeEntitiesSystem).with(positionComponent));
+        modify.addSystem(Queries.of(positionComponent), WorldTest_Positions::changeEntitiesSystem);
 
         for (int i = 0; i < 1000; i++) {
             tick.run();
@@ -61,22 +59,6 @@ class WorldTest_Positions {
                 modify.run();
             }
         }
-
-//        for (var archetype : world.archetypeMap.values()) {
-//            var positions = (float[]) archetype.getColumn(positionComponent);
-//            for (int i = 0; i < archetype.getCount(); i++) {
-//                assert positions[i * 2] == 0;
-//                assert positions[i * 2 + 1] == 0;
-//            }
-//        }
-//        world.runOnce(new SystemState.Builder((archetypes, world) -> {
-//            for (var archetype : archetypes) {
-//                var positions = (float[]) archetype.getColumn(positionComponent);
-//                for (int i = 0; i < archetype.getCount(); i++) {
-//                    System.out.println(positions[i * 2] + ", " + positions[i * 2 + 1] + " (" + i + ")");
-//                }
-//            }
-//        }).with(positionComponent));
     }
 
     static void positionSystem1(List<Archetype> archetypes, World world) {

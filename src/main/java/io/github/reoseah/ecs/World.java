@@ -26,7 +26,7 @@ public final class World {
 
     // TODO: use adjacency graph
     @VisibleForTesting
-    final Map<long[], Archetype> archetypeMap = new Object2ObjectOpenCustomHashMap<>(BitSets.HashStrategy.INSTANCE);
+    final Map<long[], Archetype> archetypeMap = new Object2ObjectOpenCustomHashMap<>(LongArrayHashStrategy.INSTANCE);
 
     private final List<SystemState> systems = new ArrayList<>();
 
@@ -72,6 +72,18 @@ public final class World {
     ///
     /// The instances are not updated if the underlying data changes,
     /// therefore, should not be cached. Instead, store [#entity].
+    ///
+    /// ## Example:
+    /// ```java
+    /// var world = new World();
+    /// int myInt = world.createComponent(ComponentType.IntegerComponent.INSTANCE);
+    /// int myLong = world.createComponent(ComponentType.LongComponent.INSTANCE);
+    ///
+    /// int entity = world.createEntity(BitSets.encode(myInt, myLong))
+    ///         .setInt(myInt, 2)
+    ///         .setLong(myLong, 200)
+    ///         .entity;
+    ///```
     public static class EntityAccessor {
         public final int entity;
         private final Archetype archetype;
@@ -114,21 +126,6 @@ public final class World {
         }
     }
 
-    // TODO: currently systems using the same components/query each maintain
-    //     a list of matching archetypes, possibly cache returned instances,
-    //     keyed by bitmask/query, and in #createArchetype iterate through
-    //     existing keys and add archetype to corresponding lists;
-    //     systems would cache a reference to these mutable list, so they get
-    //     their state updated automatically
-    public List<Archetype> getMatchingArchetypes(long[] componentMask) {
-        var archetypes = new ArrayList<Archetype>();
-        for (var archetype : this.archetypes) {
-            if (BitSets.contains(archetype.componentMask, componentMask)) {
-                archetypes.add(archetype);
-            }
-        }
-        return archetypes;
-    }
 
     @ApiStatus.Internal
     public Archetype createArchetype(long[] componentMask) {
@@ -137,7 +134,7 @@ public final class World {
         this.archetypeMap.put(componentMask, archetype);
 
         for (var system : this.systems) {
-            if (BitSets.contains(system.componentMask, componentMask)) {
+            if (BitSets.contains(system.query, componentMask)) {
                 system.archetypes.add(archetype);
             }
         }
@@ -150,9 +147,26 @@ public final class World {
         this.systems.add(system);
     }
 
-    public void runOnce(SystemState.Builder builder) {
-        var system = builder.build(this);
-        system.run(this);
+    public void runOnce(long[] query, SystemFunction system) {
+        var state = new SystemState(system, query, this.getQueryArchetypes(query));
+        state.run(this);
+    }
+
+    // TODO: currently systems using the same components/query each maintain
+    //     a list of matching archetypes, possibly cache returned instances,
+    //     keyed by bitmask/query, and in #createArchetype iterate through
+    //     existing keys and add archetype to corresponding lists;
+    //     systems would cache a reference to these mutable list, so they get
+    //     their state updated automatically
+    @ApiStatus.Internal
+    public List<Archetype> getQueryArchetypes(long[] query) {
+        var archetypes = new ArrayList<Archetype>();
+        for (var archetype : this.archetypes) {
+            if (Queries.matches(query, archetype.componentMask)) {
+                archetypes.add(archetype);
+            }
+        }
+        return archetypes;
     }
 
     public Schedule createSchedule() {
