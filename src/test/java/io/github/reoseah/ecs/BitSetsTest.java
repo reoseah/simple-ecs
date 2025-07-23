@@ -1,5 +1,6 @@
 package io.github.reoseah.ecs;
 
+import io.github.reoseah.ecs.bitmanipulation.BitSets;
 import it.unimi.dsi.fastutil.ints.IntArraySet;
 import org.junit.jupiter.api.Test;
 

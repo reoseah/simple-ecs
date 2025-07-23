@@ -1,4 +1,4 @@
-package io.github.reoseah.ecs;
+package io.github.reoseah.ecs.bitmanipulation;
 
 import it.unimi.dsi.fastutil.ints.IntCollection;
 

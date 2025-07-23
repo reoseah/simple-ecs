@@ -1,4 +1,4 @@
-package io.github.reoseah.ecs;
+package io.github.reoseah.ecs.bitmanipulation;
 
 import it.unimi.dsi.fastutil.ints.IntArraySet;
 import it.unimi.dsi.fastutil.ints.IntCollection;
@@ -63,13 +63,13 @@ public class Queries {
         return true;
     }
 
-    static Builder builder() {
+    public static Builder builder() {
         return new Builder();
     }
 
     /// Shortcut to create a query with just 'used' bitset. Similar to
     /// [BitSets#encode] except for the first value.
-    static long[] of(int... components) {
+    public static long[] of(int... components) {
         int max = 0;
         for (int value : components) {
             if (value > max) {
@@ -89,7 +89,7 @@ public class Queries {
         return bits;
     }
 
-    static long[] encode(IntCollection used, IntCollection required, IntCollection excluded) {
+    public static long[] encode(IntCollection used, IntCollection required, IntCollection excluded) {
         int usedMax = 0;
         for (int component : used) {
             usedMax = Math.max(usedMax, component);

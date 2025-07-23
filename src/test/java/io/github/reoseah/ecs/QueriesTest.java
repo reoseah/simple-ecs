@@ -1,5 +1,7 @@
 package io.github.reoseah.ecs;
 
+import io.github.reoseah.ecs.bitmanipulation.BitSets;
+import io.github.reoseah.ecs.bitmanipulation.Queries;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -7,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class QueriesTest {
     @Test
     void testQueryBuilder() {
-        Queries.Builder builder = new Queries.Builder()
+        var builder = Queries.builder()
                 .use(1, 2)
                 .require(3, 4)
                 .exclude(5, 6);
@@ -46,13 +48,9 @@ public class QueriesTest {
 
     @Test
     void testEmptyQuery() {
-        Queries.Builder builder = new Queries.Builder();
-        long[] query = builder.build();
+        long[] query = Queries.of();
 
-        // Empty query should have at least one element (for storing offsets)
-        assertTrue(query.length >= 1);
-
-        // Empty query should match empty bitset
+        // empty query should match empty bitset
         assertTrue(Queries.matches(query, new long[1]));
     }
 }

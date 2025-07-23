@@ -1,25 +1,37 @@
 package io.github.reoseah.ecs;
 
-import it.unimi.dsi.fastutil.ints.Int2LongMap;
-import it.unimi.dsi.fastutil.ints.Int2LongOpenHashMap;
+import io.github.reoseah.ecs.bitmanipulation.BitSets;
+import io.github.reoseah.ecs.bitmanipulation.LongArrayHashStrategy;
+import io.github.reoseah.ecs.bitmanipulation.Queries;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
 import org.jetbrains.annotations.ApiStatus;
 import org.jetbrains.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
 public final class World {
-    @VisibleForTesting
-    final List<ComponentType<?>> components = new ArrayList<>();
+    private static final int DEFAULT_ENTITY_CAPACITY = 512;
 
-    /// Map from entity ID (`int`) to `long` containing archetype ID in the
-    /// lower 32 bits and entity position inside the archetype in the upper 32.
-    /// (Technically 31 bits, as integers in Java are signed and negative ones
-    /// can't be used to index arrays.)
-    @VisibleForTesting
-    final Int2LongMap entityMap = new Int2LongOpenHashMap();
+    private final List<ComponentType<?>> components = new ArrayList<>();
+
+    /// Alive entities are mapped from their ID to a pair of archetype ID and
+    /// their position inside their archetype, packed into a long like so:
+    /// ```java
+    /// entityMap[entity] = (archetype << 32L) | row
+    ///```
+    ///
+    /// Removed entities are mapped to an entity removed before them. This
+    /// forms an implicit "stack" of dead entities, without having to use
+    /// extra memory for them. For more detailed explanation see
+    /// <a href="https://skypjack.github.io/2019-05-06-ecs-baf-part-3/">ECS
+    /// back and forth, Part 3 - Why you don't need to store deleted entities</a>.
+    /// The [#removedEntity] is the "head" of this stack.
+    private long[] entityMap = new long[DEFAULT_ENTITY_CAPACITY];
+    private int entityCount = 0;
+    private int removedEntity = -1;
 
     @VisibleForTesting
     final List<Archetype> archetypes = new ArrayList<>();
@@ -41,11 +53,23 @@ public final class World {
     }
 
     public int getEntityCount() {
-        return this.entityMap.size();
+        return this.entityCount;
     }
 
-    public EntityAccessor createEntity(long[] componentMask) {
-        int entity = this.entityMap.size();
+    public CreateEntityResult createEntity(long[] componentMask) {
+        int entity;
+        if (this.removedEntity != -1) {
+            entity = this.removedEntity;
+
+            long removedEntityData = this.entityMap[this.removedEntity];
+            this.removedEntity = (int) removedEntityData;
+        } else {
+            entity = this.entityCount;
+
+            if (entity == this.entityMap.length) {
+                this.entityMap = Arrays.copyOf(this.entityMap, this.entityMap.length * 2);
+            }
+        }
 
         var archetype = this.archetypeMap.get(componentMask);
         if (archetype == null) {
@@ -53,79 +77,41 @@ public final class World {
         }
 
         int pos = archetype.add(entity);
-        this.entityMap.put(entity, ((long) archetype.id << Integer.SIZE) | pos);
+        this.entityMap[entity] = ((long) archetype.id << 32) | pos;
+        this.entityCount++;
 
-        return new EntityAccessor(entity, archetype, pos);
+        return new CreateEntityResult(archetype, pos, entity);
     }
 
-    public EntityAccessor accessEntity(int entity) {
-        long location = this.entityMap.remove(entity);
-        int archetypeId = (int) (location >> Integer.SIZE);
+    public EntityLocation<?> accessEntity(int entity) {
+        long location = this.entityMap[entity];
+        int archetypeId = (int) (location >> 32);
         int pos = (int) location;
         var archetype = this.archetypes.get(archetypeId);
 
-        return new EntityAccessor(entity, archetype, pos);
-    }
-
-    /// Caches entity's ID and archetype position and allows setting the
-    /// components in a way that avoids boxing primitives to the extent possible.
-    ///
-    /// The instances are not updated if the underlying data changes,
-    /// therefore, should not be cached. Instead, store [#entity].
-    ///
-    /// ## Example:
-    /// ```java
-    /// var world = new World();
-    /// int myInt = world.createComponent(ComponentType.IntegerComponent.INSTANCE);
-    /// int myLong = world.createComponent(ComponentType.LongComponent.INSTANCE);
-    ///
-    /// int entity = world.createEntity(BitSets.encode(myInt, myLong))
-    ///         .setInt(myInt, 2)
-    ///         .setLong(myLong, 200)
-    ///         .entity;
-    ///```
-    public static class EntityAccessor {
-        public final int entity;
-        private final Archetype archetype;
-        private final int pos;
-
-        public EntityAccessor(int entity, Archetype archetype, int pos) {
-            this.entity = entity;
-            this.archetype = archetype;
-            this.pos = pos;
-        }
-
-        /// Sets value for an `int` component. Assumes the component is backed
-        /// by `int[]`, otherwise will throw [ClassCastException].
-        public EntityAccessor setInt(int component, int value) {
-            ((int[]) this.archetype.getColumn(component))[this.pos] = value;
-            return this;
-        }
-
-        /// Sets value for a `long` component. Assumes the component is backed
-        /// by `long[]`, otherwise will throw [ClassCastException].
-        public EntityAccessor setLong(int component, long value) {
-            ((long[]) this.archetype.getColumn(component))[this.pos] = value;
-            return this;
-        }
+        return new EntityLocation<>(archetype, pos);
     }
 
     public long getEntityLocation(int entity) {
-        return this.entityMap.get(entity);
+        return this.entityMap[entity];
     }
 
     public void removeEntity(int entity) {
-        long location = this.entityMap.remove(entity);
-        int archetypeId = (int) (location >> Integer.SIZE);
+        long location = this.entityMap[entity];
+
+        this.entityMap[entity] = this.removedEntity;
+        this.removedEntity = entity;
+        this.entityCount--;
+
+        int archetypeId = (int) (location >> 32);
         int pos = (int) location;
 
         var archetype = this.archetypes.get(archetypeId);
-        int moved = archetype.remove(entity, pos);
-        if (moved != -1) {
-            this.entityMap.put(moved, location);
+        int swapped = archetype.remove(entity, pos);
+        if (swapped != -1) {
+            this.entityMap[swapped] = location;
         }
     }
-
 
     @ApiStatus.Internal
     public Archetype createArchetype(long[] componentMask) {
@@ -140,16 +126,6 @@ public final class World {
         }
 
         return archetype;
-    }
-
-    @ApiStatus.Internal
-    public void addSystem(SystemState system) {
-        this.systems.add(system);
-    }
-
-    public void runOnce(long[] query, SystemFunction system) {
-        var state = new SystemState(system, query, this.getQueryArchetypes(query));
-        state.run(this);
     }
 
     // TODO: currently systems using the same components/query each maintain
@@ -169,7 +145,78 @@ public final class World {
         return archetypes;
     }
 
+    @ApiStatus.Internal
+    public void addSystem(SystemState system) {
+        this.systems.add(system);
+    }
+
+    public void runOnce(long[] query, SystemFunction system) {
+        var state = new SystemState(system, query, this.getQueryArchetypes(query));
+        state.run(this);
+    }
+
+
     public Schedule createSchedule() {
         return new Schedule(this);
+    }
+
+    /// Allows setting entity's components in a way that avoids boxing
+    /// primitives to the extent possible.
+    ///
+    /// ## Example:
+    /// ```java
+    /// var world = new World();
+    /// int myInt = world.createComponent(ComponentType.IntegerComponent.INSTANCE);
+    /// int myLong = world.createComponent(ComponentType.LongComponent.INSTANCE);
+    ///
+    /// // world.createEntity returns a subtype of this class
+    /// int myEntity =
+    ///         world.createEntity(BitSets.encode(myInt, myLong))
+    ///         .setInt(myInt, 1)
+    ///         .setLong(myLong, 10)
+    ///         .entity;
+    ///
+    /// world.accessEntity(myEntity)
+    ///         .setInt(myInt, 2)
+    ///         .setLong(myLong, 20);
+    ///```
+    @SuppressWarnings("unchecked") // casting "this" to class extending it for method chaining
+    public sealed static class EntityLocation<Self extends EntityLocation<Self>> permits CreateEntityResult {
+        private final Archetype archetype;
+        private final int pos;
+
+        EntityLocation(Archetype archetype, int pos) {
+            this.archetype = archetype;
+            this.pos = pos;
+        }
+
+        /// Sets value for an `int` component. Assumes the component is backed
+        /// by `int[]`, otherwise will throw [ClassCastException].
+        public Self setInt(int component, int value) {
+            ((int[]) this.archetype.getColumn(component))[this.pos] = value;
+            return (Self) this;
+        }
+
+        /// Sets value for a `long` component. Assumes the component is backed
+        /// by `long[]`, otherwise will throw [ClassCastException].
+        public Self setLong(int component, long value) {
+            ((long[]) this.archetype.getColumn(component))[this.pos] = value;
+            return (Self) this;
+        }
+
+        // TODO: add other overloads
+    }
+
+    /// Return value from [World#createEntity]. Allows to access ID of the
+    /// created entity.
+    ///
+    /// @see EntityLocation parent class for description of other methods
+    public static final class CreateEntityResult extends EntityLocation<CreateEntityResult> {
+        public final int entity;
+
+        CreateEntityResult(Archetype archetype, int pos, int entity) {
+            super(archetype, pos);
+            this.entity = entity;
+        }
     }
 }

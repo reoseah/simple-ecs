@@ -1,5 +1,7 @@
 package io.github.reoseah.ecs;
 
+import io.github.reoseah.ecs.bitmanipulation.BitSets;
+import io.github.reoseah.ecs.bitmanipulation.Queries;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,11 +32,11 @@ public class WorldTest {
                 .setInt(componentA, 2) //
                 .setLong(componentB, 2);
 
-        assertEquals(2, world.entityMap.size());
+        assertEquals(2, world.getEntityCount());
 
         world.removeEntity(entity1);
 
-        assertEquals(1, world.entityMap.size());
+        assertEquals(1, world.getEntityCount());
     }
 
     @Test
