@@ -9,8 +9,8 @@ public class Archetype {
 
     private final World world;
     public final int id;
-    public final long[] componentMask;
-    private final int[] components;
+    final long[] componentMask;
+    final int[] components;
 
     /// Entities stored in this archetype, the order and size should match the
     /// data in [#columns].
@@ -18,10 +18,10 @@ public class Archetype {
     /// Reverse map is maintained globally in [World#entityMap].
     public int[] entities;
     /// The number of entities actually contained in [#entities] and [#columns].
-    private int count;
+    private int population;
     /// An array of arrays - the `Object` here can be `int[]`, `long[]` or other
     /// type according to component's [ColumnType].
-    private final Object[] columns;
+    final Object[] columns;
 
     public Archetype(World world, int id, long[] componentMask) {
         this.world = world;
@@ -32,7 +32,7 @@ public class Archetype {
         this.components = new int[componentCount];
         this.columns = new Object[componentCount];
 
-        this.count = 0;
+        this.population = 0;
         this.entities = new int[DEFAULT_CAPACITY];
 
         for (int i = 0, componentIdx = 0; i < componentMask.length * Long.SIZE; i++) {
@@ -47,9 +47,9 @@ public class Archetype {
         }
     }
 
-    ///  Returns number of entities inside this archetype.
-    public int getCount() {
-        return this.count;
+    /// Returns number of entities inside this archetype.
+    public int population() {
+        return this.population;
     }
 
     /// Returns type-erased storage underlying the passed component.
@@ -66,20 +66,19 @@ public class Archetype {
     /// 'dense index' or 'row', so that it can be registered to entity map in
     /// [World].
     int add(int entity) {
-        if (this.count == this.entities.length) {
-            // grow the list of entities and columns
+        if (this.population == this.entities.length) {
             int newCapacity = this.entities.length * 2;
 
             this.entities = Arrays.copyOf(this.entities, newCapacity);
             for (int i = 0; i < this.components.length; i++) {
-                @SuppressWarnings("unchecked") var column = ((ColumnType<Object>) this.world.getComponentType(this.components[i])).growStorage(this.columns[i], newCapacity);
+                @SuppressWarnings("unchecked") var column = this.world.getComponentType(this.components[i]).growStorage(this.columns[i], newCapacity);
 
                 this.columns[i] = column;
             }
         }
-        int pos = this.count;
+        int pos = this.population;
         this.entities[pos] = entity;
-        this.count++;
+        this.population++;
         return pos;
     }
 
@@ -93,12 +92,13 @@ public class Archetype {
     ///     other, if a wrong pair is passed, the archetype will be in an
     ///     invalid state
     /// @see World#removeEntity
+    @SuppressWarnings("unchecked")
     int remove(int entity, int pos) {
-        int popped = --this.count;
+        int popped = --this.population;
         if (this.entities[popped] == entity) {
             for (int i = 0; i < this.components.length; i++) {
                 int component = this.components[i];
-                @SuppressWarnings("unchecked") var type = (ColumnType<Object>) this.world.getComponentType(component);
+                var type = this.world.getComponentType(component);
 
                 type.remove(this.columns[i], popped);
             }
@@ -108,11 +108,12 @@ public class Archetype {
 
             for (int i = 0; i < this.components.length; i++) {
                 int component = this.components[i];
-                @SuppressWarnings("unchecked") var type = (ColumnType<Object>) this.world.getComponentType(component);
+                var type = this.world.getComponentType(component);
 
-                type.move(this.columns[i], popped, pos);
+                type.replace(this.columns[i], popped, pos);
             }
             return this.entities[pos];
         }
     }
+
 }

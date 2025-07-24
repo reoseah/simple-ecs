@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 public class BitSetsTest {
     @Test
     void testEncodeWithVarargs() {
-        long[] bits = BitSets.encode(0, 1, 63, 512);
+        long[] bits = BitSets.of(0, 1, 63, 512);
 
         assertTrue(BitSets.has(bits, 0));
         assertTrue(BitSets.has(bits, 1));
@@ -27,7 +27,7 @@ public class BitSetsTest {
         set.add(63);
         set.add(512);
 
-        long[] bits = BitSets.encode(set);
+        long[] bits = BitSets.of(set);
 
         assertTrue(BitSets.has(bits, 0));
         assertTrue(BitSets.has(bits, 1));
@@ -56,9 +56,9 @@ public class BitSetsTest {
 
     @Test
     void testContains() {
-        long[] larger = BitSets.encode(0, 1, 2, 3, 4);
-        long[] smaller = BitSets.encode(1, 3);
-        long[] different = BitSets.encode(1, 5);
+        long[] larger = BitSets.of(0, 1, 2, 3, 4);
+        long[] smaller = BitSets.of(1, 3);
+        long[] different = BitSets.of(1, 5);
 
         assertTrue(BitSets.contains(larger, smaller));
         assertFalse(BitSets.contains(smaller, larger));

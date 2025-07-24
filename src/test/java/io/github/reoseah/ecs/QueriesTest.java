@@ -37,10 +37,10 @@ public class QueriesTest {
                 .build();
 
         // matching entity bits (has 1,2,3,4 and not 5,6)
-        long[] matchingBits = BitSets.encode(1, 2, 3, 4);
+        long[] matchingBits = BitSets.of(1, 2, 3, 4);
 
         // non-matching entity bits (has 5 which should be excluded)
-        long[] nonMatchingBits = BitSets.encode(1, 2, 3, 4, 5);
+        long[] nonMatchingBits = BitSets.of(1, 2, 3, 4, 5);
 
         assertTrue(Queries.matches(query, matchingBits));
         assertFalse(Queries.matches(query, nonMatchingBits));

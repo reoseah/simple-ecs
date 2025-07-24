@@ -6,7 +6,7 @@ import java.util.List;
 public class Schedule {
     private final World world;
     private final List<SystemState> systems;
-    /// TODO: use query information to order/parallelize running systems
+    // TODO: use query information to order/parallelize multiple systems
 
     public Schedule(World world) {
         this.world = world;
@@ -19,7 +19,7 @@ public class Schedule {
         }
     }
 
-    public void addSystem(long[] query, SystemFunction handler) {
+    public void addSystem(long[] query, SystemRunnable handler) {
         var system = new SystemState(handler, query, this.world.getQueryArchetypes(query));
         this.systems.add(system);
         this.world.addSystem(system);

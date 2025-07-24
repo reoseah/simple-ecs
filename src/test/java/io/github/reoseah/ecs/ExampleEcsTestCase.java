@@ -11,7 +11,99 @@ import java.util.Random;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-class WorldTest_Positions {
+public class ExampleEcsTestCase {
+    static World world = new World();
+    static int positionComponent = world.createComponent(FloatPairColumn.INSTANCE);
+    static int ageComponent = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
+    static Random random = new Random();
+
+    @ParameterizedTest
+    @CsvSource("100, 1000")
+    void run(int entities, int updates) {
+        var entityMask = BitSets.of(positionComponent, ageComponent);
+        for (int i = 0; i < entities; i++) {
+            world.spawn(entityMask);
+        }
+
+        var tick = world.createSchedule();
+        tick.addSystem(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem1);
+        tick.addSystem(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem2);
+        tick.addSystem(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem3);
+        tick.addSystem(Queries.of(ageComponent), ExampleEcsTestCase::ageSystem);
+
+        var modify = world.createSchedule();
+        modify.addSystem(Queries.of(positionComponent, ageComponent), ExampleEcsTestCase::changeEntitiesSystem);
+
+        for (int i = 0; i < updates; i++) {
+            tick.run();
+            if (i % 100 == 0) {
+                modify.run();
+            }
+        }
+
+        world.runOnce(Queries.of(positionComponent, ageComponent), (archetypes, world) -> {
+            for (var archetype : archetypes) {
+                assertEquals(entities, archetype.population());
+
+                var positions = (float[]) archetype.getColumn(positionComponent);
+                var ages = (int[]) archetype.getColumn(ageComponent);
+
+                for (int i = 0; i < archetype.population(); i++) {
+                    // this should hold as one system increments age by 1,
+                    // another increments position X by 0.5, and other two
+                    // systems cancel each other out
+                    assertEquals(ages[i], positions[i * 2] * 2);
+                }
+            }
+        });
+        // this should hold because every time we remove an entity we add another one
+        assertEquals(entities, world.getEntityCount());
+    }
+
+    static void positionSystem1(List<Archetype> archetypes, World world) {
+        for (var archetype : archetypes) {
+            var positions = (float[]) archetype.getColumn(positionComponent);
+            for (int i = 0; i < archetype.population(); i++) {
+                positions[i * 2]++;
+                positions[i * 2 + 1]--;
+            }
+        }
+    }
+
+    static void positionSystem2(List<Archetype> archetypes, World world) {
+        for (var archetype : archetypes) {
+            var positions = (float[]) archetype.getColumn(positionComponent);
+            for (int i = 0; i < archetype.population(); i++) {
+                positions[i * 2]--;
+                positions[i * 2 + 1]++;
+            }
+        }
+    }
+
+    static void positionSystem3(List<Archetype> archetypes, World world) {
+        for (var archetype : archetypes) {
+            var positions = (float[]) archetype.getColumn(positionComponent);
+            for (int i = 0; i < archetype.population(); i++) {
+                positions[i * 2] += 0.5f;
+                positions[i * 2 + 1] -= 0.5f;
+            }
+        }
+    }
+
+    static void ageSystem(List<Archetype> archetypes, World world) {
+        for (var archetype : archetypes) {
+            var ages = (int[]) archetype.getColumn(ageComponent);
+            for (int i = 0; i < archetype.population(); i++) {
+                ages[i]++;
+            }
+        }
+    }
+
+    static void changeEntitiesSystem(List<Archetype> archetypes, World world) {
+        world.removeEntity(random.nextInt(world.getEntityCount()));
+        world.spawn(BitSets.of(positionComponent, ageComponent));
+    }
+
     enum FloatPairColumn implements ColumnType<float[]> {
         INSTANCE;
 
@@ -32,100 +124,17 @@ class WorldTest_Positions {
         }
 
         @Override
-        public void move(float[] storage, int from, int to) {
+        public void replace(float[] storage, int from, int to) {
             storage[to * 2] = storage[from * 2];
             storage[to * 2 + 1] = storage[from * 2 + 1];
             storage[from * 2] = 0;
             storage[from * 2 + 1] = 0;
         }
-    }
 
-    static World world = new World();
-    static int positionComponent = world.createComponent(FloatPairColumn.INSTANCE);
-    static int ageComponent = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
-    static Random random = new Random();
-
-    @ParameterizedTest
-    @CsvSource("100, 1000")
-    void run(int entities, int updates) {
-        var entityMask = BitSets.encode(positionComponent, ageComponent);
-        for (int i = 0; i < entities; i++) {
-            world.createEntity(entityMask);
+        @Override
+        public void transfer(float[] storage, int index, float[] destination, int destinationIndex) {
+            destination[destinationIndex * 2] = storage[index * 2];
+            destination[destinationIndex * 2 + 1] = storage[index * 2 + 1];
         }
-
-        var tick = world.createSchedule();
-        tick.addSystem(Queries.of(positionComponent), WorldTest_Positions::positionSystem1);
-        tick.addSystem(Queries.of(positionComponent), WorldTest_Positions::positionSystem2);
-        tick.addSystem(Queries.of(positionComponent), WorldTest_Positions::positionSystem3);
-        tick.addSystem(Queries.of(ageComponent), WorldTest_Positions::ageSystem);
-
-        var modify = world.createSchedule();
-        modify.addSystem(Queries.of(positionComponent, ageComponent), WorldTest_Positions::changeEntitiesSystem);
-
-        for (int i = 0; i < updates; i++) {
-            tick.run();
-            if (i % 100 == 0) {
-                modify.run();
-            }
-        }
-
-        world.runOnce(Queries.of(positionComponent, ageComponent), (archetypes, world) -> {
-            for (var archetype : archetypes) {
-                assertEquals(entities, archetype.getCount());
-
-                var positions = (float[]) archetype.getColumn(positionComponent);
-                var ages = (int[]) archetype.getColumn(ageComponent);
-
-                for (int i = 0; i < archetype.getCount(); i++) {
-                    assertEquals(ages[i], positions[i * 2] * 2);
-                }
-            }
-        });
-//        assertEquals(entities, world.getEntityCount());
-    }
-
-    static void positionSystem1(List<Archetype> archetypes, World world) {
-        for (var archetype : archetypes) {
-            var positions = (float[]) archetype.getColumn(positionComponent);
-            for (int i = 0; i < archetype.getCount(); i++) {
-                positions[i * 2]++;
-                positions[i * 2 + 1]--;
-            }
-        }
-    }
-
-    static void positionSystem2(List<Archetype> archetypes, World world) {
-        for (var archetype : archetypes) {
-            var positions = (float[]) archetype.getColumn(positionComponent);
-            for (int i = 0; i < archetype.getCount(); i++) {
-                positions[i * 2]--;
-                positions[i * 2 + 1]++;
-            }
-        }
-    }
-
-    static void positionSystem3(List<Archetype> archetypes, World world) {
-        for (var archetype : archetypes) {
-            var positions = (float[]) archetype.getColumn(positionComponent);
-            for (int i = 0; i < archetype.getCount(); i++) {
-                positions[i * 2] += 0.5f;
-                positions[i * 2 + 1] -= 0.5f;
-            }
-        }
-    }
-
-    static void ageSystem(List<Archetype> archetypes, World world) {
-        for (var archetype : archetypes) {
-            var ages = (int[]) archetype.getColumn(ageComponent);
-            for (int i = 0; i < archetype.getCount(); i++) {
-                ages[i]++;
-            }
-        }
-    }
-
-    static void changeEntitiesSystem(List<Archetype> archetypes, World world) {
-        // TODO: don't use map size for generating entity IDs, it only worked so far because I never deleted entities...
-        world.removeEntity(random.nextInt(world.getEntityCount()));
-        world.createEntity(BitSets.encode(positionComponent, ageComponent));
     }
 }

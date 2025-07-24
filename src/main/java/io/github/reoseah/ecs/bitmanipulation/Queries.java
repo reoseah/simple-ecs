@@ -68,7 +68,7 @@ public class Queries {
     }
 
     /// Shortcut to create a query with just 'used' bitset. Similar to
-    /// [BitSets#encode] except for the first value.
+    /// [BitSets#of] except for the first value.
     public static long[] of(int... components) {
         int max = 0;
         for (int value : components) {

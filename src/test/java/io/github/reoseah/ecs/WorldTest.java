@@ -6,6 +6,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class WorldTest {
     World world;
@@ -18,17 +19,17 @@ public class WorldTest {
         world = new World();
         componentA = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
         componentB = world.createComponent(ColumnType.LongColumn.INSTANCE);
-        mask = BitSets.encode(componentA, componentB);
+        mask = BitSets.of(componentA, componentB);
     }
 
     @Test
-    void createDeleteEntities() {
-        int entity1 = world.createEntity(mask) //
+    void testRemoveEntity() {
+        int entity1 = world.spawn(mask) //
                 .setInt(componentA, 1) //
                 .setLong(componentB, 1) //
                 .entity;
 
-        world.createEntity(mask) //
+        world.spawn(mask) //
                 .setInt(componentA, 2) //
                 .setLong(componentB, 2);
 
@@ -37,11 +38,12 @@ public class WorldTest {
         world.removeEntity(entity1);
 
         assertEquals(1, world.getEntityCount());
+        assertNull(world.accessEntity(entity1));
     }
 
     @Test
-    void runSystem() {
-        int entity1 = world.createEntity(mask) //
+    void testSchedule() {
+        int entity1 = world.spawn(mask) //
                 .setInt(componentA, 10) //
                 .setLong(componentB, 20) //
                 .entity;
@@ -60,7 +62,7 @@ public class WorldTest {
                         var columnA = (int[]) archetype.getColumn(componentA);
                         var columnB = (long[]) archetype.getColumn(componentB);
 
-                        for (int i = 0; i < archetype.getCount(); i++) {
+                        for (int i = 0; i < archetype.population(); i++) {
                             assertEquals(entity1, entities[i]);
                             assertEquals(10, columnA[i]);
                             assertEquals(20, columnB[i]);
@@ -80,5 +82,36 @@ public class WorldTest {
         schedule.run();
         // no matching entity, the counter shouldn't get increased
         assertEquals(2, counter[0]);
+    }
+
+    @Test
+    void testInsertingComponents() {
+        int entity1 = world.spawn(BitSets.EMPTY).entity;
+
+        world.insertComponents(entity1, BitSets.of(componentA)).setInt(componentA, 10);
+        world.insertComponents(entity1, BitSets.of(componentB)).setLong(componentB, 100);
+
+        int[] counter = new int[] { 0 };
+
+        world.runOnce(Queries.of(componentA, componentB), (archetypes, _w) -> {
+            for (var archetype : archetypes) {
+                for (int i = 0; i < archetype.population(); i++) {
+                    counter[0]++;
+                }
+            }
+        });
+        assertEquals(1, counter[0]);
+
+
+        world.removeComponents(entity1, BitSets.of(componentA));
+        world.runOnce(Queries.of(componentA, componentB), (archetypes, _w) -> {
+            for (var archetype : archetypes) {
+                for (int i = 0; i < archetype.population(); i++) {
+                    counter[0]++;
+                }
+            }
+        });
+        // we removed one of the components, so query shouldn't match
+        assertEquals(1, counter[0]);
     }
 }
