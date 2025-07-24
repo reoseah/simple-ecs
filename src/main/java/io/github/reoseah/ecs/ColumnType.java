@@ -117,7 +117,7 @@ public interface ColumnType<S> {
     /// from `Object[]` and they are not assignable to each other.
     ///
     /// ## Example
-    /// ```
+    /// ```java
     /// var intArrayColumn = new TypedObjectColumn(int[][]::new);
     ///
     /// var world = new World();
@@ -125,8 +125,8 @@ public interface ColumnType<S> {
     ///
     /// int myEntity = world.addEntity(BitSets.of(intArrayComponent)).entity;
     ///
-    /// world.runOnce(Queries.of(intArrayComponent),(archetypes, _w) -> {
-    ///     for (var archetype : archetypes){
+    /// world.runOnce(Queries.of(intArrayComponent), (archetypes, _w) -> {
+    ///     for (var archetype : archetypes) {
     ///         var column = archetype.getColumn(intArrayColumn);
     ///
     ///         assertEquals(int[][].class, column.getClass());
@@ -135,9 +135,9 @@ public interface ColumnType<S> {
     ///
     ///         for (int i = 0; i < archetype.getCount(); i++){
     ///             myCodeUsingIntArray(((int[][]) column)[i]);
-    ///}
-    ///}
-    ///});
+    ///         }
+    ///     }
+    /// });
     ///
     /// void myCodeUsingIntArray(int[] data){ ... }
     ///```

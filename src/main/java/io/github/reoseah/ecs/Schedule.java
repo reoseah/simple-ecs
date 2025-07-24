@@ -22,6 +22,5 @@ public class Schedule {
     public void addSystem(long[] query, SystemRunnable handler) {
         var system = new SystemState(handler, query, this.world.getQueryArchetypes(query));
         this.systems.add(system);
-        this.world.addSystem(system);
     }
 }

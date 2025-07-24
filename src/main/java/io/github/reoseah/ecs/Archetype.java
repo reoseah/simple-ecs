@@ -48,7 +48,7 @@ public class Archetype {
     }
 
     /// Returns number of entities inside this archetype.
-    public int population() {
+    public int entityCount() {
         return this.population;
     }
 

@@ -16,7 +16,7 @@ public final class World {
     private static final long REMOVED_ENTITY_FLAG = 1L << 63;
     private static final long ENTITY_BITS = 0xFFFF_FFFFL;
 
-    /// Maps component ids to their column type.
+    /// List of all components. Maps component ids to their column type.
     @SuppressWarnings("rawtypes")
     private final List<ColumnType> components = new ArrayList<>();
 
@@ -36,13 +36,13 @@ public final class World {
     private int entityCount = 0;
     private int removedEntity = -1;
 
-    /// Maps archetype ids to their instance.
+    /// List of all archetypes. Maps archetype ids to their instance.
     private final List<Archetype> archetypes = new ArrayList<>();
 
     // TODO: use adjacency graph
     private final Map<long[], Archetype> archetypeMap = new Object2ObjectOpenCustomHashMap<>(LongArrayHashStrategy.INSTANCE);
 
-    private final List<SystemState> systems = new ArrayList<>();
+    private final Map<long[], List<Archetype>> queries = new Object2ObjectOpenCustomHashMap<>(LongArrayHashStrategy.INSTANCE);
 
     public int createComponent(ColumnType<?> component) {
         int idx = this.components.size();
@@ -179,8 +179,10 @@ public final class World {
     @SuppressWarnings("unchecked")
     int move(int entity, long location, Archetype archetype, Archetype newArchetype) {
         int pos = (int) (location & ENTITY_BITS);
+        // 1. create entry in the target archetype
         int newPos = newArchetype.add(entity);
 
+        // 2. move data from the old archetype
         for (int i = 0; i < archetype.components.length; i++) {
             int component = archetype.components[i];
 
@@ -202,6 +204,7 @@ public final class World {
             columnType.transfer(column, pos, newColumn, newPos);
         }
 
+        // 3. delete entry in the old archetype
         int swapped = archetype.remove(entity, pos);
         if (swapped != -1) {
             this.entityMap[swapped] = location;
@@ -210,49 +213,55 @@ public final class World {
         return newPos;
     }
 
+    public Schedule createSchedule() {
+        return new Schedule(this);
+    }
+
+    public void runOnce(long[] query, SystemRunnable system) {
+        var list = this.queries.get(query);
+        if (list == null) {
+            list = new ArrayList<>();
+            for (var archetype : this.archetypes) {
+                if (Queries.matches(query, archetype.componentMask)) {
+                    list.add(archetype);
+                }
+            }
+        }
+
+        var state = new SystemState(system, query, list);
+        state.run(this);
+    }
+
     Archetype createArchetype(long[] componentMask) {
         var archetype = new Archetype(this, this.archetypes.size(), componentMask);
         this.archetypes.add(archetype);
         this.archetypeMap.put(componentMask, archetype);
 
-        for (var system : this.systems) {
-            if (BitSets.contains(system.query, componentMask)) {
-                system.archetypes.add(archetype);
+        for (var entry : this.queries.entrySet()) {
+            var query = entry.getKey();
+            if (Queries.matches(query, componentMask)) {
+                entry.getValue().add(archetype);
             }
         }
 
         return archetype;
     }
 
-    // TODO: currently systems using the same components/query each maintain
-    //     a list of matching archetypes, possibly cache returned instances,
-    //     keyed by bitmask/query, and in #createArchetype iterate through
-    //     existing keys and add archetype to corresponding lists;
-    //     systems would cache a reference to these mutable list, so they get
-    //     their state updated automatically
     List<Archetype> getQueryArchetypes(long[] query) {
-        var archetypes = new ArrayList<Archetype>();
-        for (var archetype : this.archetypes) {
-            if (Queries.matches(query, archetype.componentMask)) {
-                archetypes.add(archetype);
+        var list = this.queries.get(query);
+
+        if (list == null) {
+            list = new ArrayList<>();
+            for (var archetype : this.archetypes) {
+                if (Queries.matches(query, archetype.componentMask)) {
+                    list.add(archetype);
+                }
             }
+            this.queries.put(query, list);
         }
-        return archetypes;
-    }
 
-    void addSystem(SystemState system) {
-        this.systems.add(system);
+        return list;
     }
-
-    public Schedule createSchedule() {
-        return new Schedule(this);
-    }
-
-    public void runOnce(long[] query, SystemRunnable system) {
-        var state = new SystemState(system, query, this.getQueryArchetypes(query));
-        state.run(this);
-    }
-
 
     /// Allows setting entity's components in a way that avoids boxing
     /// primitives to the extent possible. Also, it is returned from

@@ -62,7 +62,7 @@ public class WorldTest {
                         var columnA = (int[]) archetype.getColumn(componentA);
                         var columnB = (long[]) archetype.getColumn(componentB);
 
-                        for (int i = 0; i < archetype.population(); i++) {
+                        for (int i = 0; i < archetype.entityCount(); i++) {
                             assertEquals(entity1, entities[i]);
                             assertEquals(10, columnA[i]);
                             assertEquals(20, columnB[i]);
@@ -85,33 +85,39 @@ public class WorldTest {
     }
 
     @Test
-    void testInsertingComponents() {
+    void testModifyingComponents() {
         int entity1 = world.spawn(BitSets.EMPTY).entity;
 
         world.insertComponents(entity1, BitSets.of(componentA)).setInt(componentA, 10);
         world.insertComponents(entity1, BitSets.of(componentB)).setLong(componentB, 100);
 
-        int[] counter = new int[] { 0 };
-
-        world.runOnce(Queries.of(componentA, componentB), (archetypes, _w) -> {
-            for (var archetype : archetypes) {
-                for (int i = 0; i < archetype.population(); i++) {
-                    counter[0]++;
-                }
-            }
-        });
-        assertEquals(1, counter[0]);
-
+        assertEntityMatches(world, Queries.of(componentA), 1);
+        assertEntityMatches(world, Queries.of(componentB), 1);
+        assertEntityMatches(world, Queries.of(componentA, componentB), 1);
 
         world.removeComponents(entity1, BitSets.of(componentA));
-        world.runOnce(Queries.of(componentA, componentB), (archetypes, _w) -> {
+
+        // we removed one of the components, so queries with A shouldn't match
+        assertEntityMatches(world, Queries.of(componentA), 0);
+        assertEntityMatches(world, Queries.of(componentB), 1);
+        assertEntityMatches(world, Queries.of(componentA, componentB), 0);
+
+        world.modifyComponents(entity1, BitSets.of(componentB), BitSets.of(componentA));
+
+        assertEntityMatches(world, Queries.of(componentA), 0);
+        assertEntityMatches(world, Queries.of(componentB), 1);
+        assertEntityMatches(world, Queries.of(componentA, componentB), 0);
+    }
+
+    void assertEntityMatches(World world, long[] query, int count) {
+        int[] counter = {0};
+
+        world.runOnce(query, (archetypes, _w) -> {
             for (var archetype : archetypes) {
-                for (int i = 0; i < archetype.population(); i++) {
-                    counter[0]++;
-                }
+                counter[0] += archetype.entityCount();
             }
         });
-        // we removed one of the components, so query shouldn't match
-        assertEquals(1, counter[0]);
+
+        assertEquals(count, counter[0]);
     }
 }

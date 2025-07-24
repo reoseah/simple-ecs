@@ -13,7 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class ExampleEcsTestCase {
     static World world = new World();
-    static int positionComponent = world.createComponent(FloatPairColumn.INSTANCE);
+    static int positionComponent = world.createComponent(ExampleEcsTestCase.FloatPairColumn.INSTANCE);
     static int ageComponent = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
     static Random random = new Random();
 
@@ -43,12 +43,12 @@ public class ExampleEcsTestCase {
 
         world.runOnce(Queries.of(positionComponent, ageComponent), (archetypes, world) -> {
             for (var archetype : archetypes) {
-                assertEquals(entities, archetype.population());
+                assertEquals(entities, archetype.entityCount());
 
                 var positions = (float[]) archetype.getColumn(positionComponent);
                 var ages = (int[]) archetype.getColumn(ageComponent);
 
-                for (int i = 0; i < archetype.population(); i++) {
+                for (int i = 0; i < archetype.entityCount(); i++) {
                     // this should hold as one system increments age by 1,
                     // another increments position X by 0.5, and other two
                     // systems cancel each other out
@@ -63,7 +63,7 @@ public class ExampleEcsTestCase {
     static void positionSystem1(List<Archetype> archetypes, World world) {
         for (var archetype : archetypes) {
             var positions = (float[]) archetype.getColumn(positionComponent);
-            for (int i = 0; i < archetype.population(); i++) {
+            for (int i = 0; i < archetype.entityCount(); i++) {
                 positions[i * 2]++;
                 positions[i * 2 + 1]--;
             }
@@ -73,7 +73,7 @@ public class ExampleEcsTestCase {
     static void positionSystem2(List<Archetype> archetypes, World world) {
         for (var archetype : archetypes) {
             var positions = (float[]) archetype.getColumn(positionComponent);
-            for (int i = 0; i < archetype.population(); i++) {
+            for (int i = 0; i < archetype.entityCount(); i++) {
                 positions[i * 2]--;
                 positions[i * 2 + 1]++;
             }
@@ -83,7 +83,7 @@ public class ExampleEcsTestCase {
     static void positionSystem3(List<Archetype> archetypes, World world) {
         for (var archetype : archetypes) {
             var positions = (float[]) archetype.getColumn(positionComponent);
-            for (int i = 0; i < archetype.population(); i++) {
+            for (int i = 0; i < archetype.entityCount(); i++) {
                 positions[i * 2] += 0.5f;
                 positions[i * 2 + 1] -= 0.5f;
             }
@@ -93,7 +93,7 @@ public class ExampleEcsTestCase {
     static void ageSystem(List<Archetype> archetypes, World world) {
         for (var archetype : archetypes) {
             var ages = (int[]) archetype.getColumn(ageComponent);
-            for (int i = 0; i < archetype.population(); i++) {
+            for (int i = 0; i < archetype.entityCount(); i++) {
                 ages[i]++;
             }
         }
@@ -104,6 +104,7 @@ public class ExampleEcsTestCase {
         world.spawn(BitSets.of(positionComponent, ageComponent));
     }
 
+    // TODO: provide such types for most common combinations of primitive types and their amounts
     enum FloatPairColumn implements ColumnType<float[]> {
         INSTANCE;
 

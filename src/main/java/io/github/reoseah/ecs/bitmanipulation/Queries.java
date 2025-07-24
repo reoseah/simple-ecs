@@ -4,9 +4,9 @@ import it.unimi.dsi.fastutil.ints.IntArraySet;
 import it.unimi.dsi.fastutil.ints.IntCollection;
 import it.unimi.dsi.fastutil.ints.IntSet;
 
-/// "Queries" are `long[]` containing three bitsets inside. The first value in
-/// such array stores the sizes of the first two bitsets in its upper and lower
-/// halves.
+/// Query masks are `long[]` containing three bitsets inside. The first value
+/// in such array stores the sizes of the first two bitsets in its upper and 
+/// lower halves.
 ///
 /// The first bit set is "used" components, you are querying them; the second -
 /// "required" components, needed for the query to match, but are not used; the
