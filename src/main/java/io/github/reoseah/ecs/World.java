@@ -247,6 +247,8 @@ public final class World {
         return archetype;
     }
 
+    /// Returns a list of archetypes matching the query. The list is 'live' and
+    /// will be updated if matching archetypes are created.
     List<Archetype> getQueryArchetypes(long[] query) {
         var list = this.queries.get(query);
 
@@ -316,6 +318,6 @@ public final class World {
             return this;
         }
 
-        // TODO: add other overloads
+        // TODO: add other primitive specializations
     }
 }

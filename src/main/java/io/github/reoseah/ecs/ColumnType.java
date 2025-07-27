@@ -3,6 +3,7 @@ package io.github.reoseah.ecs;
 import java.util.Arrays;
 import java.util.function.IntFunction;
 
+/// Provider method to handle component storage.
 public interface ColumnType<S> {
     S createStorage(int capacity);
 

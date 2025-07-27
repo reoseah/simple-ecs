@@ -51,7 +51,7 @@ public class WorldTest {
         int[] counter = {0};
 
         var schedule = world.createSchedule();
-        schedule.addSystem(
+        schedule.add(
                 Queries.of(componentA, componentB),
                 (archetypes, _) -> {
                     // we only added one entity

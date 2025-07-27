@@ -26,13 +26,13 @@ public class ExampleEcsTestCase {
         }
 
         var tick = world.createSchedule();
-        tick.addSystem(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem1);
-        tick.addSystem(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem2);
-        tick.addSystem(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem3);
-        tick.addSystem(Queries.of(ageComponent), ExampleEcsTestCase::ageSystem);
+        tick.add(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem1);
+        tick.add(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem2);
+        tick.add(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem3);
+        tick.add(Queries.of(ageComponent), ExampleEcsTestCase::ageSystem);
 
         var modify = world.createSchedule();
-        modify.addSystem(Queries.of(positionComponent, ageComponent), ExampleEcsTestCase::changeEntitiesSystem);
+        modify.add(Queries.of(positionComponent, ageComponent), ExampleEcsTestCase::changeEntitiesSystem);
 
         for (int i = 0; i < updates; i++) {
             tick.run();
