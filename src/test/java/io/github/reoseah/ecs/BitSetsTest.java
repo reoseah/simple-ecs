@@ -64,4 +64,30 @@ public class BitSetsTest {
         assertFalse(BitSets.contains(smaller, larger));
         assertFalse(BitSets.contains(larger, different));
     }
+
+    @Test
+    void testNextSetBit() {
+        long[] bits = BitSets.of(0, 5, 63, 70);
+
+        assertEquals(0, BitSets.nextSetBit(bits, 0));   // First set bit
+        assertEquals(5, BitSets.nextSetBit(bits, 1));   // Next set bit
+        assertEquals(63, BitSets.nextSetBit(bits, 6));  // Beyond currently checked
+        assertEquals(70, BitSets.nextSetBit(bits, 64)); // In another word
+        assertEquals(-1, BitSets.nextSetBit(bits, 71)); // No further set bits
+    }
+
+    @Test
+    void testNextSetBitEdgeCases() {
+        long[] emptyBits = new long[0];
+        assertEquals(-1, BitSets.nextSetBit(emptyBits, 0)); // Empty bits array
+
+        long[] singleWord = {0b10010}; // Bits set at 1 and 4
+        assertEquals(1, BitSets.nextSetBit(singleWord, 0));
+        assertEquals(4, BitSets.nextSetBit(singleWord, 2));
+        assertEquals(-1, BitSets.nextSetBit(singleWord, 5));
+
+        Exception exception = assertThrows(IndexOutOfBoundsException.class, () ->
+                BitSets.nextSetBit(singleWord, -1));
+        assertEquals("fromIndex = -1", exception.getMessage()); // Negative index
+    }
 }

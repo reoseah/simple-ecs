@@ -126,7 +126,7 @@ public final class World {
 
         var archetype = this.archetypes.get(archetypeId);
 
-        var newComponentMask = BitSets.add(archetype.componentMask, componentMask);
+        var newComponentMask = BitSets.merge(archetype.componentMask, componentMask);
         var newArchetype = this.archetypeMap.get(newComponentMask);
         if (newArchetype == null) {
             newArchetype = createArchetype(newComponentMask);

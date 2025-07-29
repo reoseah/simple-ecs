@@ -1,6 +1,7 @@
 package io.github.reoseah.ecs.bitmanipulation;
 
 import it.unimi.dsi.fastutil.ints.IntCollection;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.Arrays;
 
@@ -126,15 +127,44 @@ public class BitSets {
         return true;
     }
 
-    public static long[] add(long[] mask1, long[] mask2) {
-        if (mask1 == mask2) {
-            return mask1;
+    public static long[] merge(long @Nullable [] mask, long @Nullable [] additions) {
+        if (mask == additions || additions == null || additions.length == 0) {
+            return mask;
         }
-        long[] result = Arrays.copyOf(mask1, Math.max(mask1.length, mask2.length));
-        for (int i = 0; i < mask2.length; i++) {
-            result[i] |= mask2[i];
+        if (mask == null) {
+            return Arrays.copyOf(additions, additions.length);
+        }
+
+        long[] result = Arrays.copyOf(mask, Math.max(mask.length, additions.length));
+        for (int i = 0; i < additions.length; i++) {
+            result[i] |= additions[i];
         }
         return result;
+    }
+
+    public static long[] mergeValues(long @Nullable [] mask, int... values) {
+        if (values.length == 0) {
+            return mask;
+        }
+        int max = 0;
+        for (int value : values) {
+            if (value > max) {
+                max = value;
+            }
+        }
+        int newLength = (max / Long.SIZE) + 1;
+        if (mask == null) {
+            mask = new long[newLength];
+        } else if (newLength > mask.length) {
+            mask = Arrays.copyOf(mask, newLength);
+        }
+        for (int value : values) {
+            int index = (value / Long.SIZE);
+            int bit = value % Long.SIZE;
+
+            mask[index] |= 1L << bit;
+        }
+        return mask;
     }
 
     public static long[] subtract(long[] mask1, long[] mask2) {
@@ -160,5 +190,40 @@ public class BitSets {
             result[i] &= ~toSubtract[i];
         }
         return result;
+    }
+
+    public static boolean isDisjoint(long[] left, long[] right) {
+        if (left == null || right == null) {
+            return true;
+        }
+        for (int i = 0; i < Math.min(left.length, right.length); i++) {
+            if ((left[i] & right[i]) != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static int nextSetBit(long[] bits, int fromIndex) {
+        if (fromIndex < 0) {
+            throw new IndexOutOfBoundsException("fromIndex = " + fromIndex);
+        }
+        int wordIndex = fromIndex / Long.SIZE;
+        if (wordIndex >= bits.length) {
+            return -1;
+        }
+
+        long word = bits[wordIndex] & (0xFFFF_FFFF_FFFF_FFFFL << fromIndex);
+
+        while (true) {
+            if (word != 0) {
+                return (wordIndex * Long.SIZE) + Long.numberOfTrailingZeros(word);
+            }
+            wordIndex++;
+            if (wordIndex == bits.length) {
+                return -1;
+            }
+            word = bits[wordIndex];
+        }
     }
 }

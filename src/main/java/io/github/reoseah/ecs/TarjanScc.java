@@ -1,98 +1,101 @@
 package io.github.reoseah.ecs;
 
-import it.unimi.dsi.fastutil.ints.Int2IntMap;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 
 import java.util.ArrayList;
 import java.util.List;
 
-
 public class TarjanScc {
     /// Returns each strongly connected component in their postorder (reverse
-    /// topological sort).
+    /// topological sort). Assumes the node numbers are linearly generated
+    /// starting at zero, so the graph adjacency representation is just a list
+    /// of nodes the current index is connected to. The extra `size` param is
+    /// so there's no need to pre-allocate values in `neighbors`.
     ///
-    /// Based on [`TarjanScc` from Bevy](https://docs.rs/bevy_ecs/0.16.1/src/bevy_ecs/schedule/graph/tarjan_scc.rs.html).
-    /// 
-    /// @param indices map from node keys to their "dense" indices
-    /// @param neighbors list of connected nodes, indexed using `indices` param
-    public static ArrayList<int[]> getStronglyConnectedComponents(Int2IntMap indices, List<IntList> neighbors) {
+    /// Inspired by [`TarjanScc` from Bevy](https://docs.rs/bevy_ecs/0.16.1/src/bevy_ecs/schedule/graph/tarjan_scc.rs.html),
+    /// and is a Pierce's memory efficient version of the Tarjan's algorithm.
+    public static ArrayList<int[]> getStronglyConnectedComponents(int size, List<IntList> neighbors) {
         var components = new ArrayList<int[]>();
 
-        var rootIndices = new int[indices.size()];
+        // Pierce's variant of Tarjan's algorithm needs only one number per
+        // graph node instead of two.
+        var rootIndices = new int[size];
         var sccIndex = 1;
         var componentId = Integer.MAX_VALUE;
 
-        var queue = new IntArrayList();
-        var stack = new IntArrayList();
+        var dfsStack = new IntArrayList();
+        // we use 31 bits for node index and 1 bit for whether it can be a "root"
+        var queueStack = new IntArrayList();
 
-        var entries = indices.int2IntEntrySet().iterator();
-        while (entries.hasNext()) {
-            if (queue.isEmpty()) {
-                var entry = entries.next();
-                var visited = rootIndices[entry.getIntValue()] != 0;
+        var nodeIter = 0;
+        while (nodeIter < size) {
+            if (queueStack.isEmpty()) {
+                var node = nodeIter++;
+                var visited = rootIndices[node] != 0;
                 if (!visited) {
-                    queue.add((entry.getIntKey() & 0x7FFF_FFFF) | 0x8000_0000);
+                    queueStack.add((node & 0x7FFF_FFFF) | 0x8000_0000);
                 }
             }
             dfs:
-            while (!queue.isEmpty()) {
-                var queued = queue.popInt();
+            while (!queueStack.isEmpty()) {
+                var queued = queueStack.popInt();
                 var node = queued & 0x7FFF_FFFF;
                 var isLocalRoot = (queued & 0x8000_0000) != 0;
 
-                var nodeIndex = indices.get(node);
-                if (rootIndices[nodeIndex] == 0) {
-                    rootIndices[nodeIndex] = sccIndex;
+                if (rootIndices[node] == 0) {
+                    rootIndices[node] = sccIndex;
                     sccIndex++;
                 }
 
-                var nodeNeighbors = neighbors.get(nodeIndex);
-                for (int i = 0; i < nodeNeighbors.size(); i++) {
-                    var neighbor = nodeNeighbors.getInt(i);
+                var nodeNeighbors = neighbors.size() > node ? neighbors.get(node) : null;
+                if (nodeNeighbors != null && !nodeNeighbors.isEmpty()) {
+                    for (int i = 0; i < nodeNeighbors.size(); i++) {
+                        var neighbor = nodeNeighbors.getInt(i);
 
-                    var neighborIndex = indices.get(neighbor);
-                    if (rootIndices[neighborIndex] == 0) {
-                        queue.push(queued);
-                        queue.push((neighbor & 0x7FFF_FFFF) | 0x8000_0000);
+                        if (rootIndices[neighbor] == 0) {
+                            queueStack.push(queued);
+                            queueStack.push((neighbor & 0x7FFF_FFFF) | 0x8000_0000);
 
-                        continue dfs;
-                    }
+                            continue dfs;
+                        }
 
-                    if (rootIndices[neighborIndex] < rootIndices[nodeIndex]) {
-                        rootIndices[nodeIndex] = rootIndices[neighborIndex];
-                        isLocalRoot = false;
+                        if (rootIndices[neighbor] < rootIndices[node]) {
+                            rootIndices[node] = rootIndices[neighbor];
+                            isLocalRoot = false;
+                        }
                     }
                 }
 
                 if (!isLocalRoot) {
-                    stack.push(node);
+                    dfsStack.push(node);
                     break;
                 }
 
                 int i;
-                for (i = stack.size() - 1; i >= 0; i--) {
-                    var stackEntry = stack.getInt(i);
-                    var index = indices.get(stackEntry);
+                for (i = dfsStack.size() - 1; i >= 0; i--) {
+                    var stackNode = dfsStack.getInt(i);
 
-                    if (rootIndices[nodeIndex] > rootIndices[index]) {
+                    if (rootIndices[node] > rootIndices[stackNode]) {
                         break;
                     } else {
-                        rootIndices[index] = componentId;
+                        rootIndices[stackNode] = componentId;
                     }
                 }
-                rootIndices[nodeIndex] = componentId;
+                rootIndices[node] = componentId;
 
-                sccIndex -= stack.size() - i - 1;
+                sccIndex -= dfsStack.size() - i - 1;
                 componentId -= 1;
 
-                int start = i + 1;
-                int[] scc = new int[stack.size() - start + 1];
+                int sccStart = i + 1;
+                int sccLength = dfsStack.size() - sccStart + 1;
+
+                int[] scc = new int[sccLength];
                 scc[0] = node;
-                stack.getElements(start, scc, 1, scc.length - 1);
+                dfsStack.getElements(sccStart, scc, 1, sccLength - 1);
+                dfsStack.removeElements(sccStart, dfsStack.size());
 
                 components.add(scc);
-                stack.removeElements(start, stack.size());
             }
         }
         return components;
