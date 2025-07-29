@@ -3,11 +3,7 @@ package io.github.reoseah.ecs.schedule;
 import io.github.reoseah.ecs.SystemRunnable;
 import io.github.reoseah.ecs.TarjanScc;
 import io.github.reoseah.ecs.bitmanipulation.BitSets;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
-import it.unimi.dsi.fastutil.ints.IntArraySet;
-import it.unimi.dsi.fastutil.ints.IntList;
-import it.unimi.dsi.fastutil.ints.IntSet;
-import it.unimi.dsi.fastutil.objects.ObjectArrayList;
+import it.unimi.dsi.fastutil.ints.*;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 import org.jetbrains.annotations.Nullable;
@@ -26,17 +22,18 @@ public class MultithreadedSchedule {
     private final List<SystemState> systems = new ArrayList<>();
     /// Adjacency representation of the graph formed by system dependencies.
     /// Indexed by system ID. Empty values are not created and kept as `null`.
-    private final List<@Nullable IntList> graph = new ArrayList<>();
+    // TODO: rewrite these with plain arrays or lists
+    private final Int2ObjectMap<@Nullable IntList> graph = new Int2ObjectOpenHashMap<>();
     /// True if [#systems] or [#graph] were modified and derived data needs to
     /// be rebuilt.
     private boolean dirty;
 
     /// Number of systems the system depends on. Indexed by system ID.
     /// Copied to [#remainingDependenciesCount] at the start of every run.
-    private final IntList dependencyCounts = new IntArrayList();
+    private final Int2IntMap dependencyCounts = new Int2IntOpenHashMap();
     /// List of systems that depend on the system. Indexed by system ID.
     /// Used to update [#remainingDependenciesCount] when a system completes.
-    private final List<IntList> dependents = new ArrayList<>();
+    private final Int2ObjectMap<IntList> dependents = new Int2ObjectOpenHashMap<>();
 
     private final ExecutorService threadPool;
 
@@ -76,7 +73,7 @@ public class MultithreadedSchedule {
                 this.processDependencyGraph();
                 this.dirty = false;
             }
-            this.prepareRunData();
+            this.resetPerRunState();
 
             while (BitSets.count(this.completedSystems) < this.systems.size()) {
                 tryScheduleSystems();
@@ -92,14 +89,24 @@ public class MultithreadedSchedule {
     }
 
     private void processDependencyGraph() {
-//        this.dependencyCounts.clear();
-        for (int i = 0; i < this.dependencyCounts.size(); i++) {
-            this.dependencyCounts.set(i, 0);
-            this.dependents.set(i, new IntArrayList()); // FIXME: wip dirty hack
-        }
-//        this.dependents.clear(); // TODO: clear sublists only, avoid tiny bit of garbage creation?
+        System.out.println("Enter processDependencyGraph: " + this.graph);
 
-        var sccList = TarjanScc.getStronglyConnectedComponents(this.systems.size(), this.graph);
+        this.dependencyCounts.clear();
+        this.dependents.clear(); // TODO: clear sublists only, avoid tiny bit of garbage creation?
+
+        // FIXME: store data as list or change getStronglyConnectedComponents code
+        var graph = new ArrayList<IntList>();
+        for (int i = 0; i < this.systems.size(); i++) {
+            if (this.graph.get(i) == null) {
+                graph.add(new IntArrayList());
+            } else {
+                graph.add(this.graph.get(i));
+            }
+        }
+
+        System.out.println("Dependency graph (list): " + graph);
+
+        var sccList = TarjanScc.getStronglyConnectedComponents(this.systems.size(), graph);
         for (var scc : sccList) {
             if (scc.length > 1) {
                 System.err.println("Found dependency cycle between systems, skipping... IDs: " + Arrays.toString(scc));
@@ -113,22 +120,25 @@ public class MultithreadedSchedule {
                 this.totalReadsAndWrites = new long[system.readsAndWrites.length];
             }
 
-            var adjacency = this.graph.size() > systemId ? this.graph.get(systemId) : null;
-            if (adjacency == null) {
+            var dependencies = this.graph.get(systemId);
+            if (dependencies == null) {
                 continue;
             }
-            for (int i = 0; i < adjacency.size(); i++) {
-                var dependency = adjacency.getInt(i);
-                this.dependencyCounts.set(systemId, this.dependencyCounts.getInt(systemId) + 1);
+            for (int i = 0; i < dependencies.size(); i++) {
+                var dependency = dependencies.getInt(i);
+                this.dependencyCounts.put(systemId, this.dependencyCounts.get(systemId) + 1);
 
-                var dependentEntry = this.dependents.get(systemId);
-                if (dependentEntry == null) {
-                    dependentEntry = new IntArrayList();
-                    this.dependents.add(dependentEntry);
+                var dependentList = this.dependents.get(dependency);
+                if (dependentList == null) {
+                    dependentList = new IntArrayList();
+                    this.dependents.put(dependency, dependentList);
                 }
-                dependentEntry.add(dependency);
+                dependentList.add(systemId);
             }
         }
+
+        System.out.println("- Dependency counts: " + this.dependencyCounts);
+        System.out.println("- Dependents: " + this.dependents);
 
         int requiredLength = ((this.systems.size() - 1) / 64) + 1;
         if (requiredLength > this.runningSystems.length) {
@@ -139,19 +149,28 @@ public class MultithreadedSchedule {
         if (this.remainingDependenciesCount.length < this.systems.size()) {
             this.remainingDependenciesCount = new int[this.systems.size()];
         }
+
+        System.out.println("Exit processDependencyGraph");
     }
 
-    private void prepareRunData() {
+    private void resetPerRunState() {
+        System.out.println("Enter resetPerRunState");
+
         Arrays.fill(this.readySystems, 0);
         Arrays.fill(this.runningSystems, 0);
         Arrays.fill(this.completedSystems, 0);
-        this.dependencyCounts.getElements(0, this.remainingDependenciesCount, 0, this.dependencyCounts.size());
+        Arrays.fill(this.remainingDependenciesCount, 0);
+        // FIXME
+        for (var entry : this.dependencyCounts.int2IntEntrySet()) {
+            this.remainingDependenciesCount[entry.getIntKey()] = entry.getIntValue();
+        }
 
         for (int i = 0; i < this.systems.size(); i++) {
             if (this.remainingDependenciesCount[i] == 0) {
                 BitSets.set(this.readySystems, i);
             }
         }
+        System.out.println("Exit resetPerRunState: remaining deps. " + Arrays.toString(remainingDependenciesCount) + ", ready system bitmask " + Arrays.toString(this.readySystems));
     }
 
     private boolean tryScheduleSystems() {
@@ -176,15 +195,19 @@ public class MultithreadedSchedule {
                     try {
                         systemState.runnable.run(null, null /* TODO pass the world and component data */);
                     } finally {
+                        System.out.println("Enter system task finally: " + systemState.id);
                         this.lock.lock();
                         try {
                             BitSets.set(this.completedSystems, systemState.id);
                             BitSets.unset(this.runningSystems, systemState.id);
                             var dependents = this.dependents.size() > systemState.id ? this.dependents.get(systemState.id) : null;
+                            System.out.println("- Dependent systems: " + dependents);
                             if (dependents != null) {
                                 for (var dependent : this.dependents.get(systemState.id)) {
                                     this.remainingDependenciesCount[dependent]--;
+                                    System.out.println("- Remaining dependencies: " + Arrays.toString(this.remainingDependenciesCount));
                                     if (this.remainingDependenciesCount[dependent] == 0) {
+                                        System.out.println("- Marking system ready: " + dependent);
                                         BitSets.set(this.readySystems, dependent);
                                     }
                                 }
@@ -240,8 +263,11 @@ public class MultithreadedSchedule {
 
 
     private boolean canRun(SystemState system) {
+        System.out.println("Enter canRun: " + system.id);
         // assumes that this.readsAndWrites is up to date, i.e., this.rebuildComponentReadsAndWrites was called and no changes happened since
-        return BitSets.isDisjoint(system.writes, this.totalReadsAndWrites);
+        boolean disjoint = BitSets.isDisjoint(system.writes, this.totalReadsAndWrites);
+        System.out.println("Exit canRun: " + disjoint);
+        return disjoint;
     }
 
     public static final class SystemState {
@@ -320,22 +346,20 @@ public class MultithreadedSchedule {
             this.schedule.systems.add(state);
             // TODO: fix dependency logic
             //  don't create entries if there's no dependencies, will have to not use ArrayList/IntArrayList types
-            this.schedule.graph.add(new IntArrayList());
-            this.schedule.dependencyCounts.add(0);
-            this.schedule.dependents.add(new IntArrayList());
             if (this.dependencies != null) {
-//                for (int dependency : this.dependencies) {
-//                    var dependencyDependents = this.schedule.graph.get(dependency);
-//                    if (dependencyDependents == null) {
-//                        dependencyDependents = new IntArrayList();
-//                            this.schedule.graph.set(dependency, dependencyDependents);
-//                    }
-//                    dependencyDependents.add(id);
-//                }
+                this.schedule.graph.put(id, new IntArrayList(this.dependencies));
             }
             if (this.dependents != null) {
-                var dependents = new IntArrayList(this.dependents);
-
+//                var dependents = new IntArrayList(this.dependents);
+//                this.schedule.graph.put(id, dependents);
+                for (int dependent : this.dependents) {
+                    var dependencyDependents = this.schedule.graph.get(dependent);
+                    if (dependencyDependents == null) {
+                        dependencyDependents = new IntArrayList();
+                        this.schedule.graph.put(dependent, dependencyDependents);
+                    }
+                    dependencyDependents.add(id);
+                }
             }
 
             return id;
