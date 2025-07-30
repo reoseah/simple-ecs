@@ -1,6 +1,7 @@
 package io.github.reoseah.ecs;
 
 import io.github.reoseah.ecs.bitmanipulation.BitSets;
+import io.github.reoseah.ecs.graphs.TarjanScc;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
 import org.jetbrains.annotations.Nullable;

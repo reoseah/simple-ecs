@@ -1,4 +1,4 @@
-package io.github.reoseah.ecs;
+package io.github.reoseah.ecs.graphs;
 
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
