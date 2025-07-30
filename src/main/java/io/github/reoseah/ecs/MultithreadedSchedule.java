@@ -1,7 +1,5 @@
-package io.github.reoseah.ecs.schedule;
+package io.github.reoseah.ecs;
 
-import io.github.reoseah.ecs.SystemRunnable;
-import io.github.reoseah.ecs.TarjanScc;
 import io.github.reoseah.ecs.bitmanipulation.BitSets;
 import it.unimi.dsi.fastutil.ints.IntArrayList;
 import it.unimi.dsi.fastutil.ints.IntList;
@@ -58,15 +56,12 @@ public class MultithreadedSchedule extends Schedule {
     /// Bitset with IDs of systems that have finished.
     private long[] completedSystems = new long[8];
 
-    public MultithreadedSchedule(ExecutorService threadPool) {
+    public MultithreadedSchedule(World world, ExecutorService threadPool) {
+        super(world);
         this.threadPool = threadPool;
     }
 
-    /// Returns a helper object to configure and add a system to the schedule.
-    public ScheduleSystemBuilder configure(SystemRunnable runnable) {
-        return new ScheduleSystemBuilder(this).runnable(runnable);
-    }
-
+    @Override
     public void run() {
         this.lock.lock();
         try {
@@ -187,7 +182,7 @@ public class MultithreadedSchedule extends Schedule {
                 // TODO: possibly implement Runnable on SystemState, pass it instead of
                 //    creating these small arrow functions?
                 try {
-                    systemState.runnable.run(null, null /* TODO pass the world and component data */);
+                    systemState.runnable.run(systemState.archetypes, this.world);
                 } catch (Exception e) {
                     LOGGER.log(Level.SEVERE, "Exception while running system " + systemState.id + " (" + systemState.runnable + ")" + ": ", e);
                 } finally {

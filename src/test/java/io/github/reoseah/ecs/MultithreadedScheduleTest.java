@@ -1,4 +1,4 @@
-package io.github.reoseah.ecs.schedule;
+package io.github.reoseah.ecs;
 
 import org.junit.jupiter.api.Test;
 
@@ -10,10 +10,12 @@ import java.util.concurrent.Executors;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class MultithreadedScheduleTest {
+    World world = new World();
+
     @Test
     void testParallelExecution() throws InterruptedException {
         try (var threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
-            var schedule = new MultithreadedSchedule(threadPool);
+            var schedule = new MultithreadedSchedule(world, threadPool);
 
             List<String> output = Collections.synchronizedList(new ArrayList<>());
 
@@ -43,7 +45,7 @@ public class MultithreadedScheduleTest {
     @Test
     void testConflictingSystemsRunSequentially() {
         try (var threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
-            var schedule = new MultithreadedSchedule(threadPool);
+            var schedule = new MultithreadedSchedule(world, threadPool);
 
             List<Long> timestamps = Collections.synchronizedList(new ArrayList<>());
 
@@ -70,7 +72,7 @@ public class MultithreadedScheduleTest {
     @Test
     void testDependentSystemsRunSequentially() {
         try (var threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
-            var schedule = new MultithreadedSchedule(threadPool);
+            var schedule = new MultithreadedSchedule(world, threadPool);
 
             List<Long> timestamps = Collections.synchronizedList(new ArrayList<>());
 
@@ -104,7 +106,7 @@ public class MultithreadedScheduleTest {
     @Test
     void testThrowsOnDependencyCycle() {
         try (var threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
-            var schedule = new MultithreadedSchedule(threadPool);
+            var schedule = new MultithreadedSchedule(world, threadPool);
 
             // Create three systems with a circular dependency: 0 -> 1 -> 2 -> 0
             var system0 = schedule.configure((_1, _2) -> {
@@ -134,14 +136,16 @@ public class MultithreadedScheduleTest {
     @Test
     void testSystemThrowingAnException() {
         try (var threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
-            var schedule = new MultithreadedSchedule(threadPool);
-            schedule.configure((_1, _2) -> {
-                    throw new RuntimeException("Test exception");
-                })
-                .apply();
+            var schedule = new MultithreadedSchedule(world, threadPool);
+            schedule.configure(MultithreadedScheduleTest::throwingSystem)
+                    .apply();
 
             System.out.println("Should log the exception:");
             schedule.run();
         }
+    }
+
+    static void throwingSystem(List<Archetype> archetypes, World world) {
+        throw new RuntimeException("Test exception thrown from a system");
     }
 }

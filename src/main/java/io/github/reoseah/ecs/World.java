@@ -2,13 +2,13 @@ package io.github.reoseah.ecs;
 
 import io.github.reoseah.ecs.bitmanipulation.BitSets;
 import io.github.reoseah.ecs.bitmanipulation.LongArrayHashStrategy;
-import io.github.reoseah.ecs.bitmanipulation.Queries;
 import it.unimi.dsi.fastutil.objects.Object2ObjectOpenCustomHashMap;
 
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
 
 public final class World {
     private static final int DEFAULT_ENTITY_CAPACITY = 512;
@@ -20,15 +20,15 @@ public final class World {
     @SuppressWarnings("rawtypes")
     private final List<ColumnType> components = new ArrayList<>();
 
-    /// Alive entities mapped from their id to a pair of archetype id and their
-    /// position inside the archetype aka "row", packed into a long like so:
+    /// Live entities mapped from their ID to a pair of archetype ID and their
+    /// position inside the archetype aka "row", packed into a `long` like so:
     /// ```java
     /// entityMap[entity] = (archetype << 32L) | row
     ///```
     ///
     /// Removed entities are mapped to an entity removed before them. This
     /// forms an implicit "stack" of dead entities, without having to use
-    /// extra memory for it. For more detailed explanation see
+    /// extra memory for it. For a more detailed explanation, see
     /// <a href="https://skypjack.github.io/2019-05-06-ecs-baf-part-3/">ECS
     /// back and forth, Part 3 - Why you don't need to store deleted entities</a>.
     /// The [#removedEntity] is the "head" of this stack.
@@ -126,10 +126,11 @@ public final class World {
 
         var archetype = this.archetypes.get(archetypeId);
 
-        var newComponentMask = BitSets.merge(archetype.componentMask, componentMask);
+        var newComponentMask = BitSets.add(archetype.componentMask, componentMask);
+
         var newArchetype = this.archetypeMap.get(newComponentMask);
         if (newArchetype == null) {
-            newArchetype = createArchetype(newComponentMask);
+            newArchetype = this.createArchetype(newComponentMask);
         }
 
         int newPos = move(entity, pos, archetype, newArchetype);
@@ -213,8 +214,8 @@ public final class World {
         return newPos;
     }
 
-    public Schedule createSchedule() {
-        return new Schedule(this);
+    public Schedule createSchedule(ExecutorService threadPool) {
+        return new MultithreadedSchedule(this, threadPool);
     }
 
     public void runOnce(long[] query, SystemRunnable system) {
@@ -222,14 +223,13 @@ public final class World {
         if (list == null) {
             list = new ArrayList<>();
             for (var archetype : this.archetypes) {
-                if (Queries.matches(query, archetype.componentMask)) {
+                if (BitSets.contains(archetype.componentMask, query)) {
                     list.add(archetype);
                 }
             }
         }
 
-        var state = new SystemState(system, query, list);
-        state.run(this);
+        system.run(list, this);
     }
 
     Archetype createArchetype(long[] componentMask) {
@@ -239,7 +239,7 @@ public final class World {
 
         for (var entry : this.queries.entrySet()) {
             var query = entry.getKey();
-            if (Queries.matches(query, componentMask)) {
+            if (BitSets.contains(componentMask, query)) {
                 entry.getValue().add(archetype);
             }
         }
@@ -255,7 +255,7 @@ public final class World {
         if (list == null) {
             list = new ArrayList<>();
             for (var archetype : this.archetypes) {
-                if (Queries.matches(query, archetype.componentMask)) {
+                if (BitSets.contains(query, archetype.componentMask)) {
                     list.add(archetype);
                 }
             }

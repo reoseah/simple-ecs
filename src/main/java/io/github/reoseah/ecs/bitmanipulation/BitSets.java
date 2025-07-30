@@ -127,7 +127,7 @@ public class BitSets {
         return true;
     }
 
-    public static long[] merge(long @Nullable [] mask, long @Nullable [] additions) {
+    public static long[] add(long @Nullable [] mask, long @Nullable [] additions) {
         if (mask == additions || additions == null || additions.length == 0) {
             return mask;
         }

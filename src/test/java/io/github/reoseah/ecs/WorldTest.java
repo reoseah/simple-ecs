@@ -1,9 +1,12 @@
 package io.github.reoseah.ecs;
 
 import io.github.reoseah.ecs.bitmanipulation.BitSets;
-import io.github.reoseah.ecs.bitmanipulation.Queries;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -14,12 +17,20 @@ public class WorldTest {
     int componentB;
     long[] mask;
 
+    ExecutorService threadPool;
+
     @BeforeEach
     void createWorld() {
         world = new World();
         componentA = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
         componentB = world.createComponent(ColumnType.LongColumn.INSTANCE);
         mask = BitSets.of(componentA, componentB);
+        threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
+    }
+
+    @AfterEach
+    void shutdownThreadPool() {
+        threadPool.shutdown();
     }
 
     @Test
@@ -50,10 +61,8 @@ public class WorldTest {
 
         int[] counter = {0};
 
-        var schedule = world.createSchedule();
-        schedule.add(
-                Queries.of(componentA, componentB),
-                (archetypes, _) -> {
+        var schedule = world.createSchedule(threadPool);
+        schedule.configure((archetypes, _) -> {
                     // we only added one entity
                     assertEquals(1, archetypes.size());
 
@@ -70,7 +79,9 @@ public class WorldTest {
                             counter[0]++;
                         }
                     }
-                });
+                }) //
+                .writes(componentA, componentB) //
+                .apply();
 
         schedule.run();
         assertEquals(1, counter[0]);
@@ -91,25 +102,25 @@ public class WorldTest {
         world.insertComponents(entity1, BitSets.of(componentA)).setInt(componentA, 10);
         world.insertComponents(entity1, BitSets.of(componentB)).setLong(componentB, 100);
 
-        assertEntityMatches(world, Queries.of(componentA), 1);
-        assertEntityMatches(world, Queries.of(componentB), 1);
-        assertEntityMatches(world, Queries.of(componentA, componentB), 1);
+        assertEntityMatchCount(world, BitSets.of(componentA), 1);
+        assertEntityMatchCount(world, BitSets.of(componentB), 1);
+        assertEntityMatchCount(world, BitSets.of(componentA, componentB), 1);
 
         world.removeComponents(entity1, BitSets.of(componentA));
 
         // we removed one of the components, so queries with A shouldn't match
-        assertEntityMatches(world, Queries.of(componentA), 0);
-        assertEntityMatches(world, Queries.of(componentB), 1);
-        assertEntityMatches(world, Queries.of(componentA, componentB), 0);
+        assertEntityMatchCount(world, BitSets.of(componentA), 0);
+        assertEntityMatchCount(world, BitSets.of(componentB), 1);
+        assertEntityMatchCount(world, BitSets.of(componentA, componentB), 0);
 
         world.modifyComponents(entity1, BitSets.of(componentB), BitSets.of(componentA));
 
-        assertEntityMatches(world, Queries.of(componentA), 0);
-        assertEntityMatches(world, Queries.of(componentB), 1);
-        assertEntityMatches(world, Queries.of(componentA, componentB), 0);
+        assertEntityMatchCount(world, BitSets.of(componentA), 0);
+        assertEntityMatchCount(world, BitSets.of(componentB), 1);
+        assertEntityMatchCount(world, BitSets.of(componentA, componentB), 0);
     }
 
-    void assertEntityMatches(World world, long[] query, int count) {
+    void assertEntityMatchCount(World world, long[] query, int count) {
         int[] counter = {0};
 
         world.runOnce(query, (archetypes, _w) -> {

@@ -1,13 +1,14 @@
 package io.github.reoseah.ecs;
 
 import io.github.reoseah.ecs.bitmanipulation.BitSets;
-import io.github.reoseah.ecs.bitmanipulation.Queries;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -16,6 +17,7 @@ public class ExampleEcsTestCase {
     static int positionComponent = world.createComponent(ExampleEcsTestCase.FloatPairColumn.INSTANCE);
     static int ageComponent = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
     static Random random = new Random();
+    static ExecutorService threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
     @ParameterizedTest
     @CsvSource("100, 1000")
@@ -25,14 +27,14 @@ public class ExampleEcsTestCase {
             world.spawn(entityMask);
         }
 
-        var tick = world.createSchedule();
-        tick.add(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem1);
-        tick.add(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem2);
-        tick.add(Queries.of(positionComponent), ExampleEcsTestCase::positionSystem3);
-        tick.add(Queries.of(ageComponent), ExampleEcsTestCase::ageSystem);
+        var tick = world.createSchedule(threadPool);
+        tick.configure(ExampleEcsTestCase::positionSystem1).writes(positionComponent).apply();
+        tick.configure(ExampleEcsTestCase::positionSystem2).writes(positionComponent).apply();
+        tick.configure(ExampleEcsTestCase::positionSystem3).writes(positionComponent).apply();
+        tick.configure(ExampleEcsTestCase::ageSystem).writes(ageComponent).apply();
 
-        var modify = world.createSchedule();
-        modify.add(Queries.of(positionComponent, ageComponent), ExampleEcsTestCase::changeEntitiesSystem);
+        var modify = world.createSchedule(threadPool);
+        modify.configure(ExampleEcsTestCase::changeEntitiesSystem).writes(positionComponent, ageComponent).apply();
 
         for (int i = 0; i < updates; i++) {
             tick.run();
@@ -41,7 +43,7 @@ public class ExampleEcsTestCase {
             }
         }
 
-        world.runOnce(Queries.of(positionComponent, ageComponent), (archetypes, world) -> {
+        world.runOnce(BitSets.of(positionComponent, ageComponent), (archetypes, world) -> {
             for (var archetype : archetypes) {
                 assertEquals(entities, archetype.entityCount());
 

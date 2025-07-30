@@ -18,7 +18,7 @@ public class Archetype {
     /// Reverse map is maintained globally in [World#entityMap].
     public int[] entities;
     /// The number of entities actually contained in [#entities] and [#columns].
-    private int population;
+    private int entityCount;
     /// An array of arrays - the `Object` here can be `int[]`, `long[]` or other
     /// type according to component's [ColumnType].
     final Object[] columns;
@@ -32,7 +32,7 @@ public class Archetype {
         this.components = new int[componentCount];
         this.columns = new Object[componentCount];
 
-        this.population = 0;
+        this.entityCount = 0;
         this.entities = new int[DEFAULT_CAPACITY];
 
         for (int i = 0, componentIdx = 0; i < componentMask.length * Long.SIZE; i++) {
@@ -49,7 +49,7 @@ public class Archetype {
 
     /// Returns number of entities inside this archetype.
     public int entityCount() {
-        return this.population;
+        return this.entityCount;
     }
 
     /// Returns type-erased storage underlying the passed component.
@@ -66,7 +66,7 @@ public class Archetype {
     /// 'dense index' or 'row', so that it can be registered to entity map in
     /// [World].
     int add(int entity) {
-        if (this.population == this.entities.length) {
+        if (this.entityCount == this.entities.length) {
             int newCapacity = this.entities.length * 2;
 
             this.entities = Arrays.copyOf(this.entities, newCapacity);
@@ -76,9 +76,9 @@ public class Archetype {
                 this.columns[i] = column;
             }
         }
-        int pos = this.population;
+        int pos = this.entityCount;
         this.entities[pos] = entity;
-        this.population++;
+        this.entityCount++;
         return pos;
     }
 
@@ -94,7 +94,7 @@ public class Archetype {
     /// @see World#removeEntity
     @SuppressWarnings("unchecked")
     int remove(int entity, int pos) {
-        int popped = --this.population;
+        int popped = --this.entityCount;
         if (this.entities[popped] == entity) {
             for (int i = 0; i < this.components.length; i++) {
                 int component = this.components[i];
@@ -116,4 +116,15 @@ public class Archetype {
         }
     }
 
+    @Override
+    public String toString() {
+        return "Archetype{" +
+                "id=" + id +
+                ", componentMask=" + Arrays.toString(componentMask) +
+                ", components=" + Arrays.toString(components) +
+                ", entities=" + Arrays.toString(entities) +
+                ", entityCount=" + entityCount +
+                ", columns=" + Arrays.toString(columns) +
+                '}';
+    }
 }
