@@ -226,4 +226,8 @@ public class BitSets {
             word = bits[wordIndex];
         }
     }
+
+    public static int getRequiredLength(int value) {
+        return (value / Long.SIZE) + 1;
+    }
 }

@@ -6,10 +6,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Executors;
-import java.util.logging.LogManager;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class MultithreadedScheduleTest {
     @Test
@@ -23,11 +21,9 @@ public class MultithreadedScheduleTest {
             for (int i = 0; i < 3; i++) {
                 int id = i;
                 schedule.configure((_a, _w) -> {
-                            System.out.println("Starting system " + id);
                             try {
                                 Thread.sleep(50); // simulate work
                                 output.add("System " + id);
-                                System.out.println("Finishing system " + id);
                             } catch (InterruptedException ignored) {
                             }
                         })
@@ -39,10 +35,8 @@ public class MultithreadedScheduleTest {
             schedule.run();
             long duration = System.currentTimeMillis() - start;
 
-            // All ran successfully
             assertEquals(3, output.size());
-            // They ran in parallel, so total time should be significantly less than 3 * 50ms
-            assertTrue(duration < 150, "Ran in serial, took too long: " + duration);
+            assertTrue(duration < 150, "Non-conflicting systems probably ran in sequence (too slow): " + duration + "ms");
         }
     }
 
@@ -55,7 +49,7 @@ public class MultithreadedScheduleTest {
 
             for (int i = 0; i < 2; i++) {
                 schedule.configure((_1, _2) -> {
-                            timestamps.add(System.nanoTime());
+                            timestamps.add(System.currentTimeMillis());
                             try {
                                 Thread.sleep(100);
                             } catch (InterruptedException ignored) {
@@ -68,9 +62,8 @@ public class MultithreadedScheduleTest {
 
             assertEquals(2, timestamps.size());
 
-            // second system should start only after first finishes
             long delta = Math.abs(timestamps.get(1) - timestamps.get(0));
-            assertTrue(delta > 90_000_000L, "Conflicting systems probably ran in parallel (too quickly), delta = " + delta + "ns");
+            assertTrue(delta > 90, "Conflicting systems probably ran in parallel (too quickly): " + delta + "ms");
         }
     }
 
@@ -82,7 +75,7 @@ public class MultithreadedScheduleTest {
             List<Long> timestamps = Collections.synchronizedList(new ArrayList<>());
 
             var system1 = schedule.configure((_1, _2) -> {
-                        timestamps.add(System.nanoTime());
+                        timestamps.add(System.currentTimeMillis());
                         try {
                             Thread.sleep(100);
                         } catch (InterruptedException ignored) {
@@ -90,7 +83,7 @@ public class MultithreadedScheduleTest {
                     })
                     .apply();
             schedule.configure((_1, _2) -> {
-                        timestamps.add(System.nanoTime());
+                        timestamps.add(System.currentTimeMillis());
                         try {
                             Thread.sleep(100);
                         } catch (InterruptedException ignored) {
@@ -103,9 +96,52 @@ public class MultithreadedScheduleTest {
 
             assertEquals(2, timestamps.size());
 
-            // second system should start only after first finishes
             long delta = Math.abs(timestamps.get(1) - timestamps.get(0));
-            assertTrue(delta > 90_000_000L, "Dependent systems probably ran in parallel (too quickly), delta = " + delta + "ns");
+            assertTrue(delta > 90, "Dependent systems probably ran in parallel (too quickly):" + delta + "ns");
+        }
+    }
+
+    @Test
+    void testThrowsOnDependencyCycle() {
+        try (var threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
+            var schedule = new MultithreadedSchedule(threadPool);
+
+            // Create three systems with a circular dependency: 0 -> 1 -> 2 -> 0
+            var system0 = schedule.configure((_1, _2) -> {
+                    })
+                    .apply();
+
+            var system1 = schedule.configure((_1, _2) -> {
+                    })
+                    .after(system0)
+                    .apply();
+
+            var system2 = schedule.configure((_1, _2) -> {
+                    })
+                    .after(system1)
+                    .apply();
+
+            schedule.configure((_1, _2) -> {
+                    })
+                    .after(system2)
+                    .before(system0)
+                    .apply();
+
+            assertThrows(IllegalStateException.class, schedule::run);
+        }
+    }
+
+    @Test
+    void testSystemThrowingAnException() {
+        try (var threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors())) {
+            var schedule = new MultithreadedSchedule(threadPool);
+            schedule.configure((_1, _2) -> {
+                    throw new RuntimeException("Test exception");
+                })
+                .apply();
+
+            System.out.println("Should log the exception:");
+            schedule.run();
         }
     }
 }
