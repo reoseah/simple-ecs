@@ -53,145 +53,81 @@ public class BitSets {
         return bits;
     }
 
-    public static int count(long[] bits) {
+    /// Count the number of enabled bits in the `bitset`.
+    public static int count(long[] bitset) {
         int count = 0;
-        for (long word : bits) {
+        for (long word : bitset) {
             count += Long.bitCount(word);
         }
         return count;
     }
 
-    public static boolean has(long[] bits, int value) {
-        int index = value / Long.SIZE;
-        int bit = value % Long.SIZE;
+    /// Returns whether the `bit` is enabled in the `bitset`.
+    public static boolean contains(long[] bitset, int bit) {
+        int index = bit / Long.SIZE;
+        int offset = bit % Long.SIZE;
 
-        return (bits[index] & (1L << bit)) != 0;
+        return (bitset[index] & (1L << offset)) != 0;
     }
 
-    public static void set(long[] bits, int value) {
+    /// Enable `bit` in the `bitset`.
+    public static void add(long[] bitset, int bit) {
+        int index = bit / Long.SIZE;
+        int offset = bit % Long.SIZE;
+
+        bitset[index] |= 1L << offset;
+    }
+
+    /// Disable `bit` in the `bitset`.
+    public static void remove(long[] bitset, int value) {
         int index = value / Long.SIZE;
         long bit = value % Long.SIZE;
 
-        bits[index] |= 1L << bit;
+        bitset[index] &= ~(1L << bit);
     }
 
-    /// Create a new bit set with both the existing bits and the passed values.
-    public static long[] copyWith(long[] bits, int... values) {
-        int max = 0;
-        for (int value : values) {
-            if (value > max) {
-                max = value;
-            }
+    /// Invert the `bit` in the `bitset`.
+    public static void toggle(long[] bitset, int bit) {
+        int index = bit / Long.SIZE;
+        int offset = bit % Long.SIZE;
+
+        bitset[index] ^= 1L << offset;
+    }
+
+    /// Sets the `bit` to the `enabled` value.
+    public static void set(long[] bitset, int bit, boolean enabled) {
+        int index = bit / Long.SIZE;
+        int offset = bit % Long.SIZE;
+
+        if (enabled) {
+            bitset[index] |= 1L << offset;
+        } else {
+            bitset[index] &= ~(1L << offset);
         }
-        long[] result = Arrays.copyOf(bits, Math.max(bits.length, (max / Long.SIZE) + 1));
-        for (int value : values) {
-            int index = (value / Long.SIZE);
-            int bit = value % Long.SIZE;
-
-            result[index] |= 1L << bit;
-        }
-        return result;
     }
 
-    public static void unset(long[] bits, int value) {
-        int index = value / Long.SIZE;
-        long bit = value % Long.SIZE;
-
-        bits[index] &= ~(1L << bit);
-    }
-
-    public static void toggle(long[] bits, int value) {
-        int index = value / Long.SIZE;
-        long bit = value % Long.SIZE;
-
-        bits[index] ^= 1L << bit;
-    }
-
-    public static boolean contains(long[] bits, long[] other) {
-        if (bits == other) {
+    /// Returns whether `other` is a subset of `bitset`.
+    public static boolean isSubset(long[] bitset, long[] other) {
+        if (bitset == other) {
             return true;
         }
         for (int i = 0; i < other.length; i++) {
             long otherWord = other[i];
-            if (i >= bits.length) {
+            if (i >= bitset.length) {
                 if (otherWord != 0) {
                     return false;
                 }
                 continue;
             }
-            long bitsWord = bits[i];
-            if ((bitsWord & otherWord) != otherWord) {
+            long word = bitset[i];
+            if ((word & otherWord) != otherWord) {
                 return false;
             }
         }
         return true;
     }
 
-    public static long[] add(long @Nullable [] mask, long @Nullable [] additions) {
-        if (mask == additions || additions == null || additions.length == 0) {
-            return mask;
-        }
-        if (mask == null) {
-            return Arrays.copyOf(additions, additions.length);
-        }
-
-        long[] result = Arrays.copyOf(mask, Math.max(mask.length, additions.length));
-        for (int i = 0; i < additions.length; i++) {
-            result[i] |= additions[i];
-        }
-        return result;
-    }
-
-    public static long[] mergeValues(long @Nullable [] mask, int... values) {
-        if (values.length == 0) {
-            return mask;
-        }
-        int max = 0;
-        for (int value : values) {
-            if (value > max) {
-                max = value;
-            }
-        }
-        int newLength = (max / Long.SIZE) + 1;
-        if (mask == null) {
-            mask = new long[newLength];
-        } else if (newLength > mask.length) {
-            mask = Arrays.copyOf(mask, newLength);
-        }
-        for (int value : values) {
-            int index = (value / Long.SIZE);
-            int bit = value % Long.SIZE;
-
-            mask[index] |= 1L << bit;
-        }
-        return mask;
-    }
-
-    public static long[] subtract(long[] mask1, long[] mask2) {
-        if (mask1 == mask2) {
-            return EMPTY;
-        }
-        long[] result = Arrays.copyOf(mask1, mask1.length);
-        for (int i = 0; i < Math.min(mask1.length, mask2.length); i++) {
-            result[i] &= ~mask2[i];
-        }
-        return result;
-    }
-
-    public static long[] addAndSubtract(long[] mask1, long[] toAdd, long[] toSubtract) {
-        if (mask1 == toAdd) {
-            return mask1;
-        }
-        long[] result = Arrays.copyOf(mask1, Math.max(mask1.length, toAdd.length));
-        for (int i = 0; i < toAdd.length; i++) {
-            result[i] |= toAdd[i];
-        }
-        for (int i = 0; i < Math.min(result.length, toSubtract.length); i++) {
-            result[i] &= ~toSubtract[i];
-        }
-        return result;
-    }
-
+    /// Returns whether two bitsets have no elements in common.
     public static boolean isDisjoint(long[] left, long[] right) {
         if (left == null || right == null) {
             return true;
@@ -204,30 +140,143 @@ public class BitSets {
         return true;
     }
 
-    public static int nextSetBit(long[] bits, int fromIndex) {
+    /// Returns union of two bitsets. Does not modify arguments but returns
+    /// `left` if no changes are needed.
+    public static long[] union(long[] left, long[] right) {
+        if (left == right || right.length == 0) {
+            return left;
+        }
+
+        long[] result = Arrays.copyOf(left, Math.max(left.length, right.length));
+        for (int i = 0; i < right.length; i++) {
+            result[i] |= right[i];
+        }
+        return result;
+    }
+
+    /// Returns union of the two bitsets. Modifies the larger of the
+    /// parameters and returns it.
+    public static long[] unionInPlace(long[] left, long[] right) {
+        if (left == null) {
+            return right;
+        }
+        if (left == right || right.length == 0) {
+            return left;
+        }
+        if (left.length == 0) {
+            return right;
+        }
+        if (left.length > right.length) {
+            for (int i = 0; i < right.length; i++) {
+                left[i] |= right[i];
+            }
+            return left;
+        }
+        for (int i = 0; i < left.length; i++) {
+            right[i] |= left[i];
+        }
+        return right;
+    }
+
+    /// Returns difference aka subtraction of two bitsets. Does not modify arguments.
+    public static long[] difference(long[] minuend, long[] subtrahend) {
+        if (minuend == subtrahend) {
+            return EMPTY;
+        }
+        long[] result = Arrays.copyOf(minuend, Math.max(minuend.length, subtrahend.length));
+        for (int i = 0; i < Math.max(minuend.length, subtrahend.length); i++) {
+            result[i] &= ~subtrahend[i];
+        }
+        return result;
+    }
+
+    /// Returns difference aka subtraction of two bitsets. Modifies the larger
+    /// of the parameters and returns it.
+    public static long[] differenceInPlace(long[] minuend, long[] subtrahend) {
+        if (minuend == subtrahend || minuend.length == 0) {
+            return EMPTY;
+        }
+        if (subtrahend.length == 0) {
+            return minuend;
+        }
+        if (minuend.length > subtrahend.length) {
+            for (int i = 0; i < subtrahend.length; i++) {
+                minuend[i] &= ~subtrahend[i];
+            }
+            return minuend;
+        }
+        for (int i = 0; i < minuend.length; i++) {
+            subtrahend[i] = minuend[i] & ~subtrahend[i];
+        }
+        for (int i = minuend.length; i < subtrahend.length; i++) {
+            subtrahend[i] = 0;
+        }
+        return subtrahend;
+    }
+
+    public static long[] unionAndDifference(long[] bitset, long[] addend, long[] subtrahend) {
+        if (bitset == addend) {
+            return bitset;
+        }
+        long[] result = Arrays.copyOf(bitset, Math.max(bitset.length, addend.length));
+        for (int i = 0; i < addend.length; i++) {
+            result[i] |= addend[i];
+        }
+        for (int i = 0; i < Math.min(result.length, subtrahend.length); i++) {
+            result[i] &= ~subtrahend[i];
+        }
+        return result;
+    }
+
+    public static long[] addAll(long @Nullable [] bitset, int... bits) {
+        if (bits.length == 0) {
+            return bitset;
+        }
+        int max = 0;
+        for (int value : bits) {
+            if (value > max) {
+                max = value;
+            }
+        }
+        int newLength = getRequiredLength(max);
+        if (bitset == null) {
+            bitset = new long[newLength];
+        } else if (newLength > bitset.length) {
+            bitset = Arrays.copyOf(bitset, newLength);
+        }
+        for (int bit : bits) {
+            int index = (bit / Long.SIZE);
+            int offset = bit % Long.SIZE;
+
+            bitset[index] |= 1L << offset;
+        }
+        return bitset;
+    }
+
+    public static int nextSetBit(long[] bitset, int fromIndex) {
         if (fromIndex < 0) {
-            throw new IndexOutOfBoundsException("fromIndex = " + fromIndex);
+            throw new IndexOutOfBoundsException("fromIndex < 0: " + fromIndex);
         }
         int wordIndex = fromIndex / Long.SIZE;
-        if (wordIndex >= bits.length) {
+        if (wordIndex >= bitset.length) {
             return -1;
         }
 
-        long word = bits[wordIndex] & (0xFFFF_FFFF_FFFF_FFFFL << fromIndex);
+        long word = bitset[wordIndex] & (0xFFFF_FFFF_FFFF_FFFFL << fromIndex);
 
         while (true) {
             if (word != 0) {
                 return (wordIndex * Long.SIZE) + Long.numberOfTrailingZeros(word);
             }
             wordIndex++;
-            if (wordIndex == bits.length) {
+            if (wordIndex == bitset.length) {
                 return -1;
             }
-            word = bits[wordIndex];
+            word = bitset[wordIndex];
         }
     }
 
-    public static int getRequiredLength(int value) {
-        return (value / Long.SIZE) + 1;
+    public static int getRequiredLength(int bit) {
+        return (bit / Long.SIZE) + 1;
     }
 }

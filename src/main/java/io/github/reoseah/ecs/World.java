@@ -126,7 +126,7 @@ public final class World {
 
         var archetype = this.archetypes.get(archetypeId);
 
-        var newComponentMask = BitSets.add(archetype.componentMask, componentMask);
+        var newComponentMask = BitSets.union(archetype.componentMask, componentMask);
 
         var newArchetype = this.archetypeMap.get(newComponentMask);
         if (newArchetype == null) {
@@ -146,7 +146,7 @@ public final class World {
 
         var archetype = this.archetypes.get(archetypeId);
 
-        var newComponentMask = BitSets.subtract(archetype.componentMask, componentMask);
+        var newComponentMask = BitSets.difference(archetype.componentMask, componentMask);
         var newArchetype = this.archetypeMap.get(newComponentMask);
         if (newArchetype == null) {
             newArchetype = createArchetype(newComponentMask);
@@ -165,7 +165,7 @@ public final class World {
 
         var archetype = this.archetypes.get(archetypeId);
 
-        var newComponentMask = BitSets.addAndSubtract(archetype.componentMask, maskToAdd, maskToRemove);
+        var newComponentMask = BitSets.unionAndDifference(archetype.componentMask, maskToAdd, maskToRemove);
         var newArchetype = this.archetypeMap.get(newComponentMask);
         if (newArchetype == null) {
             newArchetype = createArchetype(newComponentMask);
@@ -223,7 +223,7 @@ public final class World {
         if (list == null) {
             list = new ArrayList<>();
             for (var archetype : this.archetypes) {
-                if (BitSets.contains(archetype.componentMask, query)) {
+                if (BitSets.isSubset(archetype.componentMask, query)) {
                     list.add(archetype);
                 }
             }
@@ -239,7 +239,7 @@ public final class World {
 
         for (var entry : this.queries.entrySet()) {
             var query = entry.getKey();
-            if (BitSets.contains(componentMask, query)) {
+            if (BitSets.isSubset(componentMask, query)) {
                 entry.getValue().add(archetype);
             }
         }
@@ -255,7 +255,7 @@ public final class World {
         if (list == null) {
             list = new ArrayList<>();
             for (var archetype : this.archetypes) {
-                if (BitSets.contains(query, archetype.componentMask)) {
+                if (BitSets.isSubset(query, archetype.componentMask)) {
                     list.add(archetype);
                 }
             }
@@ -310,11 +310,17 @@ public final class World {
             return this;
         }
 
-        /// Sets value for a `Object` component. Assumes the component is backed
+        /// Sets value for an `Object` component. Assumes the component is backed
         /// by `Object[]`, otherwise will throw [ClassCastException].
         @SuppressWarnings("unchecked")
         public <T> EntityHelper setObject(int component, T value) {
             ((T[]) this.archetype.getColumn(component))[this.pos] = value;
+            return this;
+        }
+
+        public EntityHelper setBit(int component, boolean value) {
+            var bitset = (long[]) this.archetype.getColumn(component);
+            BitSets.set(bitset, this.pos, value);
             return this;
         }
 

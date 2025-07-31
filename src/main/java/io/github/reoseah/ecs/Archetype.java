@@ -19,8 +19,10 @@ public class Archetype {
     public int[] entities;
     /// The number of entities actually contained in [#entities] and [#columns].
     private int entityCount;
+
     /// An array of arrays - the `Object` here can be `int[]`, `long[]` or other
-    /// type according to component's [ColumnType].
+    /// type according to component's [ColumnType]. The inner array-like state
+    /// should be parallel to [#entities].
     final Object[] columns;
 
     public Archetype(World world, int id, long[] componentMask) {
@@ -83,9 +85,9 @@ public class Archetype {
     }
 
     /// Removes the passed entity and position from this archetype and returns
-    /// data to update entity map maintained globally in [World]:
+    /// data to update the entity map maintained globally in [World]:
     /// - `-1` indicated entity was "popped" from the end of this archetype
-    /// - non-negative integer is id of entity that was "swapped" to fill the
+    /// - non-negative integer is id of entity "swapped" to fill the
     ///   place previously used by the removed entity
     ///
     /// @implNote we don't check that `entity` and `pos` correspond to each

@@ -156,7 +156,7 @@ public class MultithreadedSchedule extends Schedule {
 
         for (int i = 0; i < this.systems.size(); i++) {
             if (this.remainingDependenciesCount[i] == 0) {
-                BitSets.set(this.readySystems, i);
+                BitSets.add(this.readySystems, i);
             }
         }
     }
@@ -164,8 +164,8 @@ public class MultithreadedSchedule extends Schedule {
     private boolean tryScheduleSystems() {
         boolean systemsRemain = false;
         for (var system = BitSets.nextSetBit(this.readySystems, 0); system != -1; system = BitSets.nextSetBit(this.readySystems, system + 1)) {
-            if (BitSets.has(this.completedSystems, system) ||
-                    BitSets.has(this.runningSystems, system)) {
+            if (BitSets.contains(this.completedSystems, system) ||
+                    BitSets.contains(this.runningSystems, system)) {
                 systemsRemain = true;
                 continue;
             }
@@ -178,7 +178,7 @@ public class MultithreadedSchedule extends Schedule {
                 continue;
             }
 
-            BitSets.set(this.runningSystems, system);
+            BitSets.add(this.runningSystems, system);
             this.threadPool.submit(() -> {
                 // TODO: possibly implement Runnable on SystemState, pass it instead of
                 //    creating these small arrow functions?
@@ -189,14 +189,14 @@ public class MultithreadedSchedule extends Schedule {
                 } finally {
                     this.lock.lock();
                     try {
-                        BitSets.set(this.completedSystems, systemState.id);
-                        BitSets.unset(this.runningSystems, systemState.id);
+                        BitSets.add(this.completedSystems, systemState.id);
+                        BitSets.remove(this.runningSystems, systemState.id);
                         var dependents = this.dependents[systemState.id];
                         if (dependents != null) {
                             for (var dependent : dependents) {
                                 this.remainingDependenciesCount[dependent]--;
                                 if (this.remainingDependenciesCount[dependent] == 0) {
-                                    BitSets.set(this.readySystems, dependent);
+                                    BitSets.add(this.readySystems, dependent);
                                 }
                             }
                         }

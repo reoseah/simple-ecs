@@ -89,24 +89,24 @@ public abstract class Schedule {
         }
 
         public ScheduleSystemBuilder reads(int... components) {
-            this.readsAndWrites = BitSets.mergeValues(this.readsAndWrites, components);
+            this.readsAndWrites = BitSets.addAll(this.readsAndWrites, components);
             return this;
         }
 
         public ScheduleSystemBuilder reads(long[] componentMask) {
-            this.readsAndWrites = BitSets.add(this.readsAndWrites, componentMask);
+            this.readsAndWrites = BitSets.unionInPlace(this.readsAndWrites, componentMask);
             return this;
         }
 
         public ScheduleSystemBuilder writes(int... components) {
-            this.writes = BitSets.mergeValues(this.writes, components);
-            this.readsAndWrites = BitSets.mergeValues(this.readsAndWrites, components);
+            this.writes = BitSets.addAll(this.writes, components);
+            this.readsAndWrites = BitSets.addAll(this.readsAndWrites, components);
             return this;
         }
 
         public ScheduleSystemBuilder writes(long[] componentMask) {
-            this.writes = BitSets.add(this.writes, componentMask);
-            this.readsAndWrites = BitSets.add(this.readsAndWrites, componentMask);
+            this.writes = BitSets.unionInPlace(this.writes, componentMask);
+            this.readsAndWrites = BitSets.unionInPlace(this.readsAndWrites, componentMask);
             return this;
         }
 

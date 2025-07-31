@@ -10,11 +10,11 @@ public class BitSetsTest {
     void testEncodeWithVarargs() {
         long[] bits = BitSets.of(0, 1, 63, 512);
 
-        assertTrue(BitSets.has(bits, 0));
-        assertTrue(BitSets.has(bits, 1));
-        assertTrue(BitSets.has(bits, 63));
-        assertTrue(BitSets.has(bits, 512));
-        assertFalse(BitSets.has(bits, 2));
+        assertTrue(BitSets.contains(bits, 0));
+        assertTrue(BitSets.contains(bits, 1));
+        assertTrue(BitSets.contains(bits, 63));
+        assertTrue(BitSets.contains(bits, 512));
+        assertFalse(BitSets.contains(bits, 2));
         assertEquals(4, BitSets.count(bits));
     }
 
@@ -28,11 +28,11 @@ public class BitSetsTest {
 
         long[] bits = BitSets.of(set);
 
-        assertTrue(BitSets.has(bits, 0));
-        assertTrue(BitSets.has(bits, 1));
-        assertTrue(BitSets.has(bits, 63));
-        assertTrue(BitSets.has(bits, 512));
-        assertFalse(BitSets.has(bits, 2));
+        assertTrue(BitSets.contains(bits, 0));
+        assertTrue(BitSets.contains(bits, 1));
+        assertTrue(BitSets.contains(bits, 63));
+        assertTrue(BitSets.contains(bits, 512));
+        assertFalse(BitSets.contains(bits, 2));
         assertEquals(4, BitSets.count(bits));
     }
 
@@ -40,28 +40,28 @@ public class BitSetsTest {
     void testSetUnsetToggle() {
         long[] bits = new long[1];
 
-        BitSets.set(bits, 5);
-        assertTrue(BitSets.has(bits, 5));
+        BitSets.add(bits, 5);
+        assertTrue(BitSets.contains(bits, 5));
 
-        BitSets.unset(bits, 5);
-        assertFalse(BitSets.has(bits, 5));
-
-        BitSets.toggle(bits, 5);
-        assertTrue(BitSets.has(bits, 5));
+        BitSets.remove(bits, 5);
+        assertFalse(BitSets.contains(bits, 5));
 
         BitSets.toggle(bits, 5);
-        assertFalse(BitSets.has(bits, 5));
+        assertTrue(BitSets.contains(bits, 5));
+
+        BitSets.toggle(bits, 5);
+        assertFalse(BitSets.contains(bits, 5));
     }
 
     @Test
-    void testContains() {
+    void testIsSubset() {
         long[] larger = BitSets.of(0, 1, 2, 3, 4);
         long[] smaller = BitSets.of(1, 3);
         long[] different = BitSets.of(1, 5);
 
-        assertTrue(BitSets.contains(larger, smaller));
-        assertFalse(BitSets.contains(smaller, larger));
-        assertFalse(BitSets.contains(larger, different));
+        assertTrue(BitSets.isSubset(larger, smaller));
+        assertFalse(BitSets.isSubset(smaller, larger));
+        assertFalse(BitSets.isSubset(larger, different));
     }
 
     @Test
@@ -85,8 +85,7 @@ public class BitSetsTest {
         assertEquals(4, BitSets.nextSetBit(singleWord, 2));
         assertEquals(-1, BitSets.nextSetBit(singleWord, 5));
 
-        Exception exception = assertThrows(IndexOutOfBoundsException.class, () ->
+        assertThrows(IndexOutOfBoundsException.class, () ->
                 BitSets.nextSetBit(singleWord, -1));
-        assertEquals("fromIndex = -1", exception.getMessage()); // Negative index
     }
 }

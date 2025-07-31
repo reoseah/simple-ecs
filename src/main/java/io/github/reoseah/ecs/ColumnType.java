@@ -1,5 +1,7 @@
 package io.github.reoseah.ecs;
 
+import io.github.reoseah.ecs.bitmanipulation.BitSets;
+
 import java.util.Arrays;
 import java.util.function.IntFunction;
 
@@ -126,8 +128,8 @@ public interface ColumnType<S> {
     ///
     /// int myEntity = world.addEntity(BitSets.of(intArrayComponent)).entity;
     ///
-    /// world.runOnce(Queries.of(intArrayComponent), (archetypes, _w) -> {
-    ///     for (var archetype : archetypes) {
+    /// world.runOnce(Queries.of(intArrayComponent),(archetypes, _w) -> {
+    ///     for (var archetype : archetypes){
     ///         var column = archetype.getColumn(intArrayColumn);
     ///
     ///         assertEquals(int[][].class, column.getClass());
@@ -136,9 +138,9 @@ public interface ColumnType<S> {
     ///
     ///         for (int i = 0; i < archetype.getCount(); i++){
     ///             myCodeUsingIntArray(((int[][]) column)[i]);
-    ///         }
-    ///     }
-    /// });
+    ///}
+    ///}
+    ///});
     ///
     /// void myCodeUsingIntArray(int[] data){ ... }
     ///```
@@ -172,6 +174,44 @@ public interface ColumnType<S> {
         @Override
         public void transfer(T[] storage, int index, T[] destination, int destinationIndex) {
             destination[destinationIndex] = storage[index];
+        }
+    }
+
+    enum BitSetColumn implements ColumnType<long[]> {
+        INSTANCE;
+
+        @Override
+        public long[] createStorage(int capacity) {
+            return new long[BitSets.getRequiredLength(capacity)];
+        }
+
+        @Override
+        public long[] growStorage(long[] current, int newCapacity) {
+            return Arrays.copyOf(current, BitSets.getRequiredLength(newCapacity));
+        }
+
+        @Override
+        public void remove(long[] storage, int index) {
+            BitSets.remove(storage, index);
+        }
+
+        @Override
+        public void replace(long[] storage, int from, int to) {
+            if (BitSets.contains(storage, from)) {
+                BitSets.add(storage, from);
+            } else {
+                BitSets.remove(storage, from);
+            }
+            BitSets.remove(storage, to);
+        }
+
+        @Override
+        public void transfer(long[] storage, int index, long[] destination, int destinationIndex) {
+            if (BitSets.contains(storage, index)) {
+                BitSets.add(destination, destinationIndex);
+            } else {
+                BitSets.remove(destination, destinationIndex);
+            }
         }
     }
 }
