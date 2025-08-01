@@ -78,16 +78,6 @@ public abstract class Schedule {
             return this;
         }
 
-        public ScheduleSystemBuilder after(int... systems) {
-            this.dependencies = createIntSetOrAddAll(this.dependencies, systems);
-            return this;
-        }
-
-        public ScheduleSystemBuilder before(int... systems) {
-            this.dependents = createIntSetOrAddAll(this.dependents, systems);
-            return this;
-        }
-
         public ScheduleSystemBuilder reads(int... components) {
             this.readsAndWrites = BitSets.addAll(this.readsAndWrites, components);
             return this;
@@ -109,6 +99,17 @@ public abstract class Schedule {
             this.readsAndWrites = BitSets.unionInPlace(this.readsAndWrites, componentMask);
             return this;
         }
+
+        public ScheduleSystemBuilder after(int... systems) {
+            this.dependencies = createIntSetOrAddAll(this.dependencies, systems);
+            return this;
+        }
+
+        public ScheduleSystemBuilder before(int... systems) {
+            this.dependents = createIntSetOrAddAll(this.dependents, systems);
+            return this;
+        }
+
 
         /// Registers the current system and returns its numeric ID.
         public int apply() {

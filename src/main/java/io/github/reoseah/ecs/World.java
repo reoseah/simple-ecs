@@ -11,28 +11,46 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 public final class World {
-    private static final int DEFAULT_ENTITY_CAPACITY = 512;
+    /// List of all components and resources registered.
+    ///
+    /// For resources, ECS doesn't care what the value here is. They are just
+    /// opaque `int` IDs used in [MultithreadedSchedule] to run systems in
+    /// parallel if their component/resource bitsets do not overlap.
+    ///
+    /// For components, the value is an instance of [ColumnType] that allows
+    /// to create, resize, etc., a storage for the component, so component
+    /// instances can be stored in primitive arrays like `int[]` or `float[]`
+    /// or other data structure that can implement [ColumnType] interface.
+    /// The corresponding bit in [#components] bitset is set when registering a
+    /// component.
+    // TODO: implement resources, currently this and #components bitset are not used
+    private final List<Object> componentsAndResources = new ArrayList<>();
+    /// Bitset of all indices in [#componentsAndResources] that are components.
+    private long[] components = new long[8];
 
-    private static final long REMOVED_ENTITY_FLAG = 1L << 63;
-    private static final long ENTITY_BITS = 0xFFFF_FFFFL;
-
-    /// List of all components. Maps component ids to their column type.
-    @SuppressWarnings("rawtypes")
-    private final List<ColumnType> components = new ArrayList<>();
-
-    /// Live entities mapped from their ID to a pair of archetype ID and their
-    /// position inside the archetype aka "row", packed into a `long` like so:
+    /// Array of entity data indexed by entity IDs.
+    ///
+    /// For "live" entities, it's a pair of archetype ID and row therein,
+    /// stored inside a 64-bit integer:
     /// ```java
     /// entityMap[entity] = (archetype << 32L) | row
     ///```
     ///
-    /// Removed entities are mapped to an entity removed before them. This
-    /// forms an implicit "stack" of dead entities, without having to use
-    /// extra memory for it. For a more detailed explanation, see
+    /// For removed entities, it points to the next removed entity, forming an
+    /// implicit "stack" of dead entities without needing extra memory:
+    /// ```java
+    /// entityMap[removedEntity] = REMOVED_ENTITY_FLAG | nextRemovedEntity
+    ///```
+    ///
+    /// For a more detailed explanation of this, see
     /// <a href="https://skypjack.github.io/2019-05-06-ecs-baf-part-3/">ECS
     /// back and forth, Part 3 - Why you don't need to store deleted entities</a>.
-    /// The [#removedEntity] is the "head" of this stack.
-    private long[] entityMap = new long[DEFAULT_ENTITY_CAPACITY];
+    private long[] entities = new long[512];
+
+    private static final long REMOVED_ENTITY_FLAG = 1L << 63;
+    private static final long ENTITY_BITS = 0xFFFF_FFFFL;
+
+    /// Number of live entities in this world.
     private int entityCount = 0;
     private int removedEntity = -1;
 
@@ -45,17 +63,24 @@ public final class World {
     private final Map<long[], List<Archetype>> queries = new Object2ObjectOpenCustomHashMap<>(LongArrayHashStrategy.INSTANCE);
 
     public int createComponent(ColumnType<?> component) {
-        int idx = this.components.size();
-        this.components.add(component);
+        int idx = this.componentsAndResources.size();
+        this.componentsAndResources.add(component);
+        this.components = BitSets.growAndAdd(this.components, idx);
         return idx;
     }
 
-    @SuppressWarnings("rawtypes")
-    public ColumnType getComponentType(int id) {
-        return this.components.get((id));
+    public int createResource() {
+        int idx = this.componentsAndResources.size();
+        this.componentsAndResources.add(null);
+        return idx;
     }
 
-    public int getEntityCount() {
+    @SuppressWarnings("unchecked")
+    public <T> ColumnType<T> componentColumnType(int id) {
+        return (ColumnType<T>) this.componentsAndResources.get((id));
+    }
+
+    public int entityCount() {
         return this.entityCount;
     }
 
@@ -64,13 +89,13 @@ public final class World {
         if (this.removedEntity != -1) {
             entity = this.removedEntity;
 
-            long removedEntityData = this.entityMap[this.removedEntity];
+            long removedEntityData = this.entities[this.removedEntity];
             this.removedEntity = (int) (removedEntityData & ENTITY_BITS);
         } else {
             entity = this.entityCount;
 
-            if (entity == this.entityMap.length) {
-                this.entityMap = Arrays.copyOf(this.entityMap, this.entityMap.length * 2);
+            if (entity == this.entities.length) {
+                this.entities = Arrays.copyOf(this.entities, this.entities.length * 2);
             }
         }
 
@@ -79,33 +104,33 @@ public final class World {
             archetype = createArchetype(componentMask);
         }
 
-        int pos = archetype.add(entity);
-        this.entityMap[entity] = ((long) archetype.id << 32) | pos;
+        int row = archetype.add(entity);
+        this.entities[entity] = ((long) archetype.id << 32) | row;
         this.entityCount++;
 
-        return new EntityHelper(entity, archetype, pos);
+        return new EntityHelper(entity, archetype, row);
     }
 
-    /// Returns a helper object with primitive-specialized chaining methods to
-    /// set the state of the entity.
+    /// Returns a helper object to set the state of the entity with chaining,
+    /// primitive-specialized methods.
     public EntityHelper accessEntity(int entity) {
-        long location = this.entityMap[entity];
+        long location = this.entities[entity];
         if ((location & REMOVED_ENTITY_FLAG) != 0) {
             return null;
         }
 
         int archetypeId = (int) (location >> 32);
+        int row = (int) location;
 
-        int pos = (int) location;
         var archetype = this.archetypes.get(archetypeId);
 
-        return new EntityHelper(entity, archetype, pos);
+        return new EntityHelper(entity, archetype, row);
     }
 
     public void removeEntity(int entity) {
-        long location = this.entityMap[entity];
+        long location = this.entities[entity];
 
-        this.entityMap[entity] = this.removedEntity | REMOVED_ENTITY_FLAG;
+        this.entities[entity] = this.removedEntity | REMOVED_ENTITY_FLAG;
         this.removedEntity = entity;
         this.entityCount--;
 
@@ -115,12 +140,12 @@ public final class World {
         var archetype = this.archetypes.get(archetypeId);
         int swapped = archetype.remove(entity, pos);
         if (swapped != -1) {
-            this.entityMap[swapped] = location;
+            this.entities[swapped] = location;
         }
     }
 
     public EntityHelper insertComponents(int entity, long[] componentMask) {
-        long location = this.entityMap[entity];
+        long location = this.entities[entity];
         int archetypeId = (int) (location >> 32);
         int pos = (int) location;
 
@@ -134,13 +159,13 @@ public final class World {
         }
 
         int newPos = move(entity, pos, archetype, newArchetype);
-        this.entityMap[entity] = ((long) newArchetype.id << 32L) | newPos;
+        this.entities[entity] = ((long) newArchetype.id << 32L) | newPos;
 
         return new EntityHelper(entity, newArchetype, newPos);
     }
 
     public EntityHelper removeComponents(int entity, long[] componentMask) {
-        long location = this.entityMap[entity];
+        long location = this.entities[entity];
         int archetypeId = (int) (location >> 32);
         int pos = (int) location;
 
@@ -153,13 +178,13 @@ public final class World {
         }
 
         int newPos = move(entity, pos, archetype, newArchetype);
-        this.entityMap[entity] = ((long) newArchetype.id << 32L) | newPos;
+        this.entities[entity] = ((long) newArchetype.id << 32L) | newPos;
 
         return new EntityHelper(entity, newArchetype, newPos);
     }
 
     public EntityHelper modifyComponents(int entity, long[] maskToAdd, long[] maskToRemove) {
-        long location = this.entityMap[entity];
+        long location = this.entities[entity];
         int archetypeId = (int) (location >> 32);
         int pos = (int) location;
 
@@ -172,15 +197,15 @@ public final class World {
         }
 
         int newPos = move(entity, pos, archetype, newArchetype);
-        this.entityMap[entity] = ((long) newArchetype.id << 32L) | newPos;
+        this.entities[entity] = ((long) newArchetype.id << 32L) | newPos;
 
         return new EntityHelper(entity, newArchetype, newPos);
     }
 
-    @SuppressWarnings("unchecked")
+    @SuppressWarnings({"unchecked", "rawtypes"})
     int move(int entity, long location, Archetype archetype, Archetype newArchetype) {
         int pos = (int) (location & ENTITY_BITS);
-        // 1. create entry in the target archetype
+        // 1. create an entry in the target archetype
         int newPos = newArchetype.add(entity);
 
         // 2. move data from the old archetype
@@ -201,14 +226,14 @@ public final class World {
             var column = archetype.columns[i];
             var newColumn = newArchetype.columns[newIndex];
 
-            var columnType = this.components.get(component);
+            var columnType = (ColumnType) this.componentsAndResources.get(component);
             columnType.transfer(column, pos, newColumn, newPos);
         }
 
         // 3. delete entry in the old archetype
         int swapped = archetype.remove(entity, pos);
         if (swapped != -1) {
-            this.entityMap[swapped] = location;
+            this.entities[swapped] = location;
         }
 
         return newPos;
@@ -288,39 +313,53 @@ public final class World {
     public static class EntityHelper {
         public final int entity;
         private final Archetype archetype;
-        private final int pos;
+        private final int row;
 
-        EntityHelper(int entity, Archetype archetype, int pos) {
+        EntityHelper(int entity, Archetype archetype, int row) {
             this.entity = entity;
             this.archetype = archetype;
-            this.pos = pos;
+            this.row = row;
         }
 
-        /// Sets value for an `int` component. Assumes the component is backed
-        /// by `int[]`, otherwise will throw [ClassCastException].
+        /// Sets value for an [ColumnType.IntArray] component, otherwise
+        /// either throws [ClassCastException] or leaves the column in an
+        /// invalid state.
         public EntityHelper setInt(int component, int value) {
-            ((int[]) this.archetype.getColumn(component))[this.pos] = value;
+            assert this.archetype.columnTypes[component] == ColumnType.IntArray.INSTANCE;
+
+            ((int[]) this.archetype.getColumn(component))[this.row] = value;
             return this;
         }
 
-        /// Sets value for a `long` component. Assumes the component is backed
-        /// by `long[]`, otherwise will throw [ClassCastException].
+        /// Sets value for an [ColumnType.LongArray] component, otherwise
+        /// either throws [ClassCastException] or leaves the column in an
+        /// invalid state.
         public EntityHelper setLong(int component, long value) {
-            ((long[]) this.archetype.getColumn(component))[this.pos] = value;
+            assert this.archetype.columnTypes[component] == ColumnType.LongArray.INSTANCE;
+
+            ((long[]) this.archetype.getColumn(component))[this.row] = value;
             return this;
         }
 
-        /// Sets value for an `Object` component. Assumes the component is backed
-        /// by `Object[]`, otherwise will throw [ClassCastException].
+        /// Sets value for an [ColumnType.ObjectArray] component, otherwise
+        /// either throws [ClassCastException] or leaves the column in an
+        /// invalid state.
         @SuppressWarnings("unchecked")
         public <T> EntityHelper setObject(int component, T value) {
-            ((T[]) this.archetype.getColumn(component))[this.pos] = value;
+            assert this.archetype.columnTypes[component] == ColumnType.ObjectArray.INSTANCE;
+
+            ((T[]) this.archetype.getColumn(component))[this.row] = value;
             return this;
         }
 
+        /// Sets value for an [ColumnType.BitSet] component, otherwise either
+        /// throws [ClassCastException] or leaves the column in an invalid
+        /// state.
         public EntityHelper setBit(int component, boolean value) {
+            assert this.archetype.columnTypes[component] == ColumnType.BitSet.INSTANCE;
+
             var bitset = (long[]) this.archetype.getColumn(component);
-            BitSets.set(bitset, this.pos, value);
+            BitSets.set(bitset, this.row, value);
             return this;
         }
 

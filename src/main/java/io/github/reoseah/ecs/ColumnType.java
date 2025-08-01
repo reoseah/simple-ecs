@@ -22,7 +22,7 @@ public interface ColumnType<S> {
     /// clean up inside this method.
     void transfer(S storage, int index, S destination, int destinationIndex);
 
-    enum IntegerColumn implements ColumnType<int[]> {
+    enum IntArray implements ColumnType<int[]> {
         INSTANCE;
 
         @Override
@@ -52,7 +52,7 @@ public interface ColumnType<S> {
         }
     }
 
-    enum LongColumn implements ColumnType<long[]> {
+    enum LongArray implements ColumnType<long[]> {
         INSTANCE;
 
         @Override
@@ -82,7 +82,7 @@ public interface ColumnType<S> {
         }
     }
 
-    enum ObjectColumn implements ColumnType<Object[]> {
+    enum ObjectArray implements ColumnType<Object[]> {
         INSTANCE;
 
         @Override
@@ -112,12 +112,12 @@ public interface ColumnType<S> {
         }
     }
 
-    /// Creates a column backed by a Java array, similar to [ObjectColumn], but
-    /// allows to use different array type than `Object[]`. This can be useful
-    /// in cases when you want to use the underlying array in other code.
+    /// Creates a column backed by a Java array, similar to [ObjectArray], but
+    /// allows to use a different array type than `Object[]`. This can be
+    /// useful in cases when you want to use the underlying array in other code.
     ///
-    /// Note that Java doesn't erase array types, e.g. `String[]` is different
-    /// from `Object[]` and they are not assignable to each other.
+    /// (Java doesn't erase array types, e.g. `String[]` is different
+    /// from `Object[]` and they are not assignable to each other.)
     ///
     /// ## Example
     /// ```java
@@ -138,12 +138,12 @@ public interface ColumnType<S> {
     ///
     ///         for (int i = 0; i < archetype.getCount(); i++){
     ///             myCodeUsingIntArray(((int[][]) column)[i]);
-    ///}
-    ///}
-    ///});
+    ///         }
+    ///     }
+    /// });
     ///
     /// void myCodeUsingIntArray(int[] data){ ... }
-    ///```
+    /// ```
     class TypedObjectColumn<T> implements ColumnType<T[]> {
         private final IntFunction<T[]> arrayConstructor;
 
@@ -177,7 +177,7 @@ public interface ColumnType<S> {
         }
     }
 
-    enum BitSetColumn implements ColumnType<long[]> {
+    enum BitSet implements ColumnType<long[]> {
         INSTANCE;
 
         @Override
@@ -197,21 +197,13 @@ public interface ColumnType<S> {
 
         @Override
         public void replace(long[] storage, int from, int to) {
-            if (BitSets.contains(storage, from)) {
-                BitSets.add(storage, from);
-            } else {
-                BitSets.remove(storage, from);
-            }
+            BitSets.set(storage, to, BitSets.contains(storage, from));
             BitSets.remove(storage, to);
         }
 
         @Override
         public void transfer(long[] storage, int index, long[] destination, int destinationIndex) {
-            if (BitSets.contains(storage, index)) {
-                BitSets.add(destination, destinationIndex);
-            } else {
-                BitSets.remove(destination, destinationIndex);
-            }
+            BitSets.set(destination, destinationIndex, BitSets.contains(storage, index));
         }
     }
 }

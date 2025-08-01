@@ -4,57 +4,64 @@ import io.github.reoseah.ecs.bitmanipulation.BitSets;
 
 import java.util.Arrays;
 
+@SuppressWarnings("unchecked")
 public class Archetype {
     private static final int DEFAULT_CAPACITY = 8;
 
-    private final World world;
     public final int id;
     final long[] componentMask;
     final int[] components;
+    @SuppressWarnings("rawtypes")
+    final ColumnType[] columnTypes;
 
     /// Entities stored in this archetype, the order and size should match the
-    /// data in [#columns].
+    /// data in [#columns]. This is like a reverse map from `row` to entity ID:
     ///
-    /// Reverse map is maintained globally in [World#entityMap].
+    /// ```java
+    /// for (var row = 0; row < archetype.entityCount(); row++){
+    ///     var entity = archetype.entities[row];
+    ///     // ...
+    ///}
+    ///```
+    ///
+    /// A "reverse" mapping is maintained globally in [World#entities].
     public int[] entities;
+
     /// The number of entities actually contained in [#entities] and [#columns].
     private int entityCount;
 
     /// An array of arrays - the `Object` here can be `int[]`, `long[]` or other
     /// type according to component's [ColumnType]. The inner array-like state
-    /// should be parallel to [#entities].
+    /// is expected to be parallel to [#entities] (and each other).
     final Object[] columns;
 
-    public Archetype(World world, int id, long[] componentMask) {
-        this.world = world;
+    Archetype(World world, int id, long[] componentMask) {
         this.id = id;
         this.componentMask = componentMask;
 
         int componentCount = BitSets.count(componentMask);
         this.components = new int[componentCount];
         this.columns = new Object[componentCount];
+        this.columnTypes = new ColumnType[componentCount];
 
         this.entityCount = 0;
         this.entities = new int[DEFAULT_CAPACITY];
 
-        for (int i = 0, componentIdx = 0; i < componentMask.length * Long.SIZE; i++) {
-            int arrayIdx = i / Long.SIZE;
-            int bitIdx = i % Long.SIZE;
-
-            if ((componentMask[arrayIdx] & (1L << bitIdx)) != 0) {
-                this.components[componentIdx] = i;
-                this.columns[componentIdx] = world.getComponentType(i).createStorage(DEFAULT_CAPACITY);
-                componentIdx++;
-            }
+        int i = 0;
+        for (int component = BitSets.nextSetBit(componentMask, 0); component != -1; component = BitSets.nextSetBit(componentMask, component + 1)) {
+            this.components[i] = component;
+            this.columnTypes[i] = world.componentColumnType(component);
+            this.columns[i] = this.columnTypes[i].createStorage(DEFAULT_CAPACITY);
+            i++;
         }
     }
 
-    /// Returns number of entities inside this archetype.
+    /// Returns a number of entities inside this archetype.
     public int entityCount() {
         return this.entityCount;
     }
 
-    /// Returns type-erased storage underlying the passed component.
+    /// Returns storage used to store `component`.
     public Object getColumn(int component) {
         for (int i = 0; i < this.components.length; i++) {
             if (this.components[i] == component) {
@@ -64,24 +71,19 @@ public class Archetype {
         throw new IllegalArgumentException("Component " + component + " is not present in this archetype.");
     }
 
-    /// Adds entity to this archetype and returns its position inside, aka
-    /// 'dense index' or 'row', so that it can be registered to entity map in
-    /// [World].
     int add(int entity) {
         if (this.entityCount == this.entities.length) {
             int newCapacity = this.entities.length * 2;
 
             this.entities = Arrays.copyOf(this.entities, newCapacity);
             for (int i = 0; i < this.components.length; i++) {
-                @SuppressWarnings("unchecked") var column = this.world.getComponentType(this.components[i]).growStorage(this.columns[i], newCapacity);
-
-                this.columns[i] = column;
+                this.columns[i] = this.columnTypes[i].growStorage(this.columns[i], newCapacity);
             }
         }
-        int pos = this.entityCount;
-        this.entities[pos] = entity;
+        int row = this.entityCount;
+        this.entities[row] = entity;
         this.entityCount++;
-        return pos;
+        return row;
     }
 
     /// Removes the passed entity and position from this archetype and returns
@@ -90,43 +92,22 @@ public class Archetype {
     /// - non-negative integer is id of entity "swapped" to fill the
     ///   place previously used by the removed entity
     ///
-    /// @implNote we don't check that `entity` and `pos` correspond to each
-    ///     other, if a wrong pair is passed, the archetype will be in an
-    ///     invalid state
     /// @see World#removeEntity
-    @SuppressWarnings("unchecked")
-    int remove(int entity, int pos) {
+    int remove(int entity, int row) {
         int popped = --this.entityCount;
         if (this.entities[popped] == entity) {
+            // clear values because they can be objects and we don't want them to stay strongly referenced
             for (int i = 0; i < this.components.length; i++) {
-                int component = this.components[i];
-                var type = this.world.getComponentType(component);
-
-                type.remove(this.columns[i], popped);
+                this.columnTypes[i].remove(this.columns[i], popped);
             }
             return -1;
         } else {
-            this.entities[pos] = this.entities[popped];
+            this.entities[row] = this.entities[popped];
 
             for (int i = 0; i < this.components.length; i++) {
-                int component = this.components[i];
-                var type = this.world.getComponentType(component);
-
-                type.replace(this.columns[i], popped, pos);
+                this.columnTypes[i].replace(this.columns[i], popped, row);
             }
-            return this.entities[pos];
+            return this.entities[row];
         }
-    }
-
-    @Override
-    public String toString() {
-        return "Archetype{" +
-                "id=" + id +
-                ", componentMask=" + Arrays.toString(componentMask) +
-                ", components=" + Arrays.toString(components) +
-                ", entities=" + Arrays.toString(entities) +
-                ", entityCount=" + entityCount +
-                ", columns=" + Arrays.toString(columns) +
-                '}';
     }
 }

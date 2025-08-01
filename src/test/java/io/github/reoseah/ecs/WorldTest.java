@@ -22,8 +22,8 @@ public class WorldTest {
     @BeforeEach
     void createWorld() {
         world = new World();
-        componentA = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
-        componentB = world.createComponent(ColumnType.LongColumn.INSTANCE);
+        componentA = world.createComponent(ColumnType.IntArray.INSTANCE);
+        componentB = world.createComponent(ColumnType.LongArray.INSTANCE);
         mask = BitSets.of(componentA, componentB);
         threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
     }
@@ -44,11 +44,11 @@ public class WorldTest {
                 .setInt(componentA, 2) //
                 .setLong(componentB, 2);
 
-        assertEquals(2, world.getEntityCount());
+        assertEquals(2, world.entityCount());
 
         world.removeEntity(entity1);
 
-        assertEquals(1, world.getEntityCount());
+        assertEquals(1, world.entityCount());
         assertNull(world.accessEntity(entity1));
     }
 

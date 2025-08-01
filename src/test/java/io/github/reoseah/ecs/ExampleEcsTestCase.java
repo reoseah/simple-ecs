@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class ExampleEcsTestCase {
     static World world = new World();
     static int positionComponent = world.createComponent(ExampleEcsTestCase.FloatPairColumn.INSTANCE);
-    static int ageComponent = world.createComponent(ColumnType.IntegerColumn.INSTANCE);
+    static int ageComponent = world.createComponent(ColumnType.IntArray.INSTANCE);
     static Random random = new Random();
     static ExecutorService threadPool = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors());
 
@@ -59,7 +59,7 @@ public class ExampleEcsTestCase {
             }
         });
         // this should hold because every time we remove an entity we add another one
-        assertEquals(entities, world.getEntityCount());
+        assertEquals(entities, world.entityCount());
     }
 
     static void positionSystem1(List<Archetype> archetypes, World world) {
@@ -102,7 +102,7 @@ public class ExampleEcsTestCase {
     }
 
     static void changeEntitiesSystem(List<Archetype> archetypes, World world) {
-        world.removeEntity(random.nextInt(world.getEntityCount()));
+        world.removeEntity(random.nextInt(world.entityCount()));
         world.spawn(BitSets.of(positionComponent, ageComponent));
     }
 

@@ -106,6 +106,16 @@ public class BitSets {
         }
     }
 
+    public static long[] growAndAdd(long[] bitset, int bit) {
+        int index = bit / Long.SIZE;
+        int offset = bit % Long.SIZE;
+        if (index >= bitset.length) {
+            bitset = Arrays.copyOf(bitset, index + 1);
+        }
+        bitset[index] |= 1L << offset;
+        return bitset;
+    }
+
     /// Returns whether `other` is a subset of `bitset`.
     public static boolean isSubset(long[] bitset, long[] other) {
         if (bitset == other) {
